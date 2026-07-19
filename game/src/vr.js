@@ -1,0 +1,234 @@
+/* HOLLOW — vr.js : Quest/WebXR session, stereo views, controller input. */
+(function (NS) {
+  'use strict';
+
+  var session = null;
+  var referenceSpace = null;
+  var supported = false;
+  var bodyYaw = 0;
+  var snapLatch = false;
+  var previousButtons = {};
+  var currentInput = {
+    moveX: 0, moveY: 0, heading: 0,
+    bodyYaw: 0,
+    trickle: false, burstPressed: false, interactPressed: false,
+    aimOrigin: null, aimDirection: null
+  };
+
+  function init(button) {
+    if (!button) return;
+    if (!navigator.xr) {
+      button.disabled = true;
+      button.textContent = 'WEBXR UNAVAILABLE';
+      return;
+    }
+    navigator.xr.isSessionSupported('immersive-vr').then(function (ok) {
+      supported = ok;
+      button.disabled = !ok;
+      button.textContent = ok ? 'ENTER VR (QUEST)' : 'IMMERSIVE VR UNAVAILABLE';
+    }).catch(function () {
+      button.disabled = true;
+      button.textContent = 'WEBXR CHECK FAILED';
+    });
+    button.addEventListener('click', function (event) {
+      event.stopPropagation();
+      enter();
+    });
+  }
+
+  function enter() {
+    if (!supported || session) return Promise.resolve(false);
+    NS.audio.ensure();
+    return NS.render.makeXRCompatible().then(function () {
+      return navigator.xr.requestSession('immersive-vr', {
+        requiredFeatures: ['local-floor'],
+        optionalFeatures: ['bounded-floor']
+      });
+    }).then(function (xrSession) {
+      session = xrSession;
+      var gl = NS.render.getContext();
+      session.updateRenderState({
+        baseLayer: new XRWebGLLayer(session, gl, {
+          alpha: false,
+          antialias: false,
+          framebufferScaleFactor: 0.8
+        }),
+        depthNear: 0.05,
+        depthFar: 220
+      });
+      return session.requestReferenceSpace('local-floor');
+    }).then(function (space) {
+      referenceSpace = space;
+      bodyYaw = 0;
+      previousButtons = {};
+      session.addEventListener('end', onEnd);
+      NS.audio.startAmbient();
+      NS.game.onVRStart();
+      session.requestAnimationFrame(onFrame);
+      return true;
+    }).catch(function (error) {
+      console.error('HOLLOW WebXR start failed:', error);
+      if (NS.game && NS.game.onVRError) NS.game.onVRError(error);
+      session = null;
+      referenceSpace = null;
+      return false;
+    });
+  }
+
+  function onEnd() {
+    session = null;
+    referenceSpace = null;
+    currentInput.trickle = false;
+    if (NS.game && NS.game.onVREnd) NS.game.onVREnd();
+  }
+
+  function onFrame(time, frame) {
+    if (!session) return;
+    session.requestAnimationFrame(onFrame);
+    var pose = frame.getViewerPose(referenceSpace);
+    if (!pose) return;
+    readInput(frame, pose);
+    NS.game.onXRFrame(time, frame, pose, currentInput, bodyYaw);
+  }
+
+  function axesFor(gamepad) {
+    if (!gamepad || !gamepad.axes || gamepad.axes.length < 2) return [0, 0];
+    var a = gamepad.axes;
+    var x = a.length >= 4 ? a[a.length - 2] : a[0];
+    var y = a.length >= 4 ? a[a.length - 1] : a[1];
+    var dead = 0.16;
+    return [Math.abs(x) > dead ? x : 0, Math.abs(y) > dead ? y : 0];
+  }
+
+  function pressed(gamepad, index) {
+    return !!(gamepad && gamepad.buttons[index] && gamepad.buttons[index].pressed);
+  }
+
+  function rising(key, value) {
+    var was = !!previousButtons[key];
+    previousButtons[key] = value;
+    return value && !was;
+  }
+
+  function rotateVectorByQuaternion(x, y, z, q) {
+    var ix = q.w * x + q.y * z - q.z * y;
+    var iy = q.w * y + q.z * x - q.x * z;
+    var iz = q.w * z + q.x * y - q.y * x;
+    var iw = -q.x * x - q.y * y - q.z * z;
+    return [
+      ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y,
+      iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z,
+      iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x
+    ];
+  }
+
+  function rotateLocalToWorld(v) {
+    var c = Math.cos(bodyYaw), s = Math.sin(bodyYaw);
+    return [c * v[0] - s * v[2], v[1], s * v[0] + c * v[2]];
+  }
+
+  function readInput(frame, pose) {
+    currentInput.moveX = 0;
+    currentInput.moveY = 0;
+    currentInput.trickle = false;
+    currentInput.burstPressed = false;
+    currentInput.interactPressed = false;
+    currentInput.aimOrigin = null;
+    currentInput.aimDirection = null;
+
+    var rightSource = null;
+    for (var i = 0; i < session.inputSources.length; i++) {
+      var source = session.inputSources[i];
+      var gp = source.gamepad;
+      var axes = axesFor(gp);
+      if (source.handedness === 'left') {
+        currentInput.moveX = axes[0];
+        currentInput.moveY = -axes[1];
+      } else if (source.handedness === 'right') {
+        rightSource = source;
+        if (Math.abs(axes[0]) > 0.75 && !snapLatch) {
+          bodyYaw += axes[0] > 0 ? Math.PI / 6 : -Math.PI / 6;
+          snapLatch = true;
+        } else if (Math.abs(axes[0]) < 0.35) {
+          snapLatch = false;
+        }
+      }
+
+      var id = source.handedness || String(i);
+      if (source.handedness === 'right' || (!rightSource && source.handedness === 'none')) {
+        currentInput.trickle = currentInput.trickle || pressed(gp, 0);
+        currentInput.burstPressed = currentInput.burstPressed ||
+          rising(id + '-burst', pressed(gp, 1));
+        currentInput.interactPressed = currentInput.interactPressed ||
+          rising(id + '-interact', pressed(gp, 4));
+      }
+    }
+
+    if (!rightSource && session.inputSources.length) rightSource = session.inputSources[0];
+    if (rightSource && rightSource.targetRaySpace) {
+      var aimPose = frame.getPose(rightSource.targetRaySpace, referenceSpace);
+      if (aimPose) {
+        var p = aimPose.transform.position;
+        var q = aimPose.transform.orientation;
+        var localDir = rotateVectorByQuaternion(0, 0, -1, q);
+        currentInput.aimDirection = rotateLocalToWorld(localDir);
+        currentInput.aimOrigin = { localX: p.x, y: p.y, localZ: p.z };
+      }
+    }
+
+    var headQ = pose.transform.orientation;
+    var headForward = rotateVectorByQuaternion(0, 0, -1, headQ);
+    var worldForward = rotateLocalToWorld(headForward);
+    currentInput.heading = Math.atan2(worldForward[0], -worldForward[2]);
+    currentInput.bodyYaw = bodyYaw;
+    if (!currentInput.aimDirection) {
+      var headP = pose.transform.position;
+      currentInput.aimDirection = worldForward;
+      currentInput.aimOrigin = { localX: headP.x, y: headP.y, localZ: headP.z };
+    }
+  }
+
+  function worldToXRMatrix(player) {
+    var c = Math.cos(bodyYaw), s = Math.sin(bodyYaw);
+    var m = new Float32Array(16);
+    m[0] = c;  m[1] = 0; m[2] = -s; m[3] = 0;
+    m[4] = 0;  m[5] = 1; m[6] = 0;  m[7] = 0;
+    m[8] = s;  m[9] = 0; m[10] = c; m[11] = 0;
+    m[12] = -(c * player.x + s * player.z);
+    m[13] = 0;
+    m[14] = s * player.x - c * player.z;
+    m[15] = 1;
+    return m;
+  }
+
+  function viewsForPose(pose, player) {
+    var worldToXR = worldToXRMatrix(player);
+    return pose.views.map(function (view) {
+      var viewport = session.renderState.baseLayer.getViewport(view);
+      return {
+        projection: view.projectionMatrix,
+        view: NS.math.mat4Multiply(view.transform.inverse.matrix, worldToXR),
+        viewport: viewport
+      };
+    });
+  }
+
+  function framebuffer() {
+    return session && session.renderState.baseLayer.framebuffer;
+  }
+
+  function end() {
+    return session ? session.end() : Promise.resolve();
+  }
+
+  NS.vr = {
+    init: init,
+    enter: enter,
+    active: function () { return !!session; },
+    end: end,
+    input: function () { return currentInput; },
+    viewsForPose: viewsForPose,
+    framebuffer: framebuffer
+  };
+})(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
+                                 : (global.HOLLOW = global.HOLLOW || {}));

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HOLLOW — FABLE DYNAMICS RD-9 (1988)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ph:#7cff9b; --ph-dim:#3f8a55; --amber:#ffb347; --red:#ff4444; --cyan:#6fe7e7;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ width:100%; height:100%; background:#000; overflow:hidden; }
+  body{
+    font-family:"Consolas","Lucida Console",monospace;
+    color:var(--ph);
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    user-select:none;
+    cursor:crosshair;
+  }
+  #glcanvas{ position:absolute; inset:0; width:100%; height:100%; display:block; background:#000; }
+
+  /* ---------- HUD ---------- */
+  #hud{ position:absolute; inset:0; pointer-events:none; display:none; }
+  .hud-corner{ position:absolute; font-size:13px; text-shadow:0 0 6px rgba(124,255,155,.7); }
+  #hud-tl{ top:18px; left:22px; }
+  #hud-tr{ top:18px; right:22px; text-align:right; }
+  #hud-bl{ bottom:18px; left:22px; }
+  #hud-br{ bottom:18px; right:22px; text-align:right; }
+  #hud-br .energized{ color:#fff; text-shadow:0 0 8px #fff; }
+  #reticle{
+    position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1px 0 0 -1px;
+    background:var(--ph); box-shadow:0 0 5px var(--ph); border-radius:50%;
+  }
+  #aux{ position:absolute; bottom:16px; left:50%; transform:translateX(-50%); width:220px; text-align:center; font-size:11px; }
+  #aux-bar{ height:6px; border:1px solid var(--ph-dim); margin-top:4px; position:relative; overflow:hidden; }
+  #aux-fill{ position:absolute; left:0; top:0; bottom:0; width:0%; background:var(--ph); box-shadow:0 0 8px var(--ph); transition:width .12s linear; }
+  #aux-tick{ position:absolute; top:-12px; font-size:10px; color:var(--red); text-shadow:0 0 6px var(--red); opacity:0; }
+  #eventline{
+    position:absolute; top:58px; left:50%; transform:translateX(-50%);
+    max-width:72%; text-align:center; font-size:14px; line-height:1.7;
+    text-shadow:0 0 8px rgba(124,255,155,.8); white-space:pre-wrap;
+  }
+  #eventline.amber{ color:var(--amber); text-shadow:0 0 8px rgba(255,179,71,.8); }
+  #eventline.red{ color:var(--red); text-shadow:0 0 8px rgba(255,68,68,.8); }
+  #eventline.cyan{ color:var(--cyan); text-shadow:0 0 8px rgba(111,231,231,.8); }
+
+  /* ---------- Screens ---------- */
+  .screen{
+    position:absolute; inset:0; display:none; z-index:5;
+    background:radial-gradient(ellipse at center, #041006 0%, #000 75%);
+    align-items:center; justify-content:center; text-align:center;
+  }
+  .screen.visible{ display:flex; }
+  .screen-inner{ max-width:760px; padding:24px; font-size:14px; line-height:1.9; }
+  .screen h1{ font-size:42px; letter-spacing:.55em; margin-bottom:6px; text-shadow:0 0 18px rgba(124,255,155,.9); }
+  .screen .sub{ color:var(--ph-dim); font-size:11px; margin-bottom:28px; }
+  .screen .blink{ animation:blink 1.1s steps(2) infinite; }
+  @keyframes blink{ 50%{ opacity:0; } }
+  .screen pre{ font-family:inherit; text-align:left; display:inline-block; font-size:12px; line-height:1.8; color:var(--ph); }
+  .dim{ color:var(--ph-dim); }
+  .amber{ color:var(--amber); }
+  .red{ color:var(--red); }
+  .opt-row{ margin-top:14px; font-size:12px; pointer-events:auto; }
+  .opt-row label{ margin:0 14px; cursor:pointer; }
+  input[type=range]{ vertical-align:middle; width:110px; accent-color:#7cff9b; cursor:pointer; }
+  input[type=checkbox]{ accent-color:#7cff9b; cursor:pointer; }
+  #enter-vr{
+    margin-top:18px; padding:10px 18px; border:1px solid var(--ph);
+    background:#031007; color:var(--ph); font:inherit; letter-spacing:.14em;
+    text-transform:uppercase; cursor:pointer; pointer-events:auto;
+    box-shadow:0 0 12px rgba(124,255,155,.18);
+  }
+  #enter-vr:disabled{ color:var(--ph-dim); border-color:var(--ph-dim); cursor:not-allowed; }
+  #vr-note{ margin-top:8px; font-size:10px; color:var(--ph-dim); }
+  #death-screen h1{ color:var(--red); text-shadow:0 0 18px rgba(255,68,68,.9); }
+  #death-epitaph{ color:var(--ph-dim); margin:18px 0 26px; }
+
+  /* ---------- Camcorder OSD ---------- */
+  .vcr{ position:absolute; color:#e8e8e0; font-size:14px; letter-spacing:.18em;
+    text-shadow:1px 1px 0 rgba(0,0,0,.9), 0 0 6px rgba(232,232,224,.35);
+  }
+  #vcr-rec{ top:16px; left:50%; transform:translateX(-50%); }
+  #vcr-rec .dot{ color:#ff3b30; text-shadow:1px 1px 0 rgba(0,0,0,.9), 0 0 8px rgba(255,59,48,.8);
+    animation:recblink 1.2s steps(2) infinite; }
+  @keyframes recblink{ 50%{ opacity:0; } }
+  #vcr-mode{ top:44px; right:22px; font-size:12px; }
+  #vcr-date{ bottom:44px; right:22px; font-size:12px; text-align:right; line-height:1.6; }
+
+  /* CSS-level CRT dressing on top of everything (the heavy lifting is in the GL post pass) */
+  #crt-frame{ position:absolute; inset:0; pointer-events:none; z-index:9;
+    box-shadow:inset 0 0 180px rgba(0,0,0,.85);
+    border-radius:18px;
+  }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+
+<div id="hud">
+  <div class="hud-corner" id="hud-tl">RD-9 RANGING ACTIVE<br><span id="hud-timer">T+00:00</span></div>
+  <div class="hud-corner" id="hud-tr"><span id="hud-pts">PTS 000000 / 700000</span></div>
+  <div class="hud-corner" id="hud-bl">CHG <span id="hud-chg">&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;</span></div>
+  <div class="hud-corner" id="hud-br"><span id="hud-obj">FUSE 0/3</span></div>
+  <div id="aux">AUX EMISSION<div id="aux-bar"><div id="aux-fill"></div></div><div id="aux-tick">&#9650;</div></div>
+  <div id="eventline"></div>
+  <div id="reticle"></div>
+  <div class="vcr" id="vcr-rec"><span class="dot">&#9679;</span> REC</div>
+  <div class="vcr" id="vcr-mode">SP</div>
+  <div class="vcr" id="vcr-date">OCT 22 1988<br><span id="vcr-clock">AM 5:47:00</span></div>
+</div>
+
+<div class="screen visible" id="boot-screen">
+  <div class="screen-inner">
+    <pre id="boot-text"></pre>
+    <div id="boot-continue" style="display:none">
+      <h1>HOLLOW</h1>
+      <div class="sub">FABLE DYNAMICS — APPLIED OPTICS DIVISION — BUILD 0.7.2 — OCT 1988<br>ARCHIVE RECONSTRUCTION — TAPE 7 OF 9</div>
+      <div class="opt-row">
+        <label>SENS <input type="range" id="opt-sens" min="2" max="20" value="8"></label>
+        <label>VOL <input type="range" id="opt-vol" min="0" max="100" value="70"></label>
+        <label><input type="checkbox" id="opt-flash"> REDUCED FLASH</label>
+      </div>
+      <p style="margin-top:30px" class="blink">PRESS ENTER / SELECT TO BEGIN DIAGNOSTIC</p>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="controls-screen">
+  <div class="screen-inner">
+    <div class="sub">RD-9 OPERATOR CARD — REV C</div>
+    <pre>
+  MOUSE ............ AIM RANGING HEAD
+  HOLD LMB ......... TRICKLE SCAN          <span class="dim">(QUIET, NARROW)</span>
+  RMB / SPACE ...... BURST SWEEP           <span class="red">(LOUD. IT WILL HEAR.)</span>
+  W A S D .......... MOVE
+  SHIFT ............ SPRINT                <span class="red">(LOUD)</span>
+  CTRL ............. CROUCH                <span class="dim">(NEAR-SILENT)</span>
+  E ................ INTERACT
+
+  DIRECTIVE: RECOVER 3 FUSES <span class="amber">[AMBER RETURNS]</span>
+             SEAT FUSES AT GENERATOR. PROCEED TO EXIT.
+
+  <span class="red">RETURN ANOMALY CLASS: RED. DO NOT APPROACH RED.</span>
+  <span class="dim">RED RETURNS ARE ALWAYS CURRENT. RED RETURNS MOVE.</span></pre>
+    <p style="margin-top:26px" class="blink">CLICK TO ENGAGE RANGING HEAD</p>
+    <button id="enter-vr" type="button" disabled>CHECKING WEBXR...</button>
+    <div id="vr-note">QUEST: LEFT STICK MOVE · RIGHT STICK SNAP TURN · TRIGGER SCAN · GRIP BURST · A INTERACT</div>
+  </div>
+</div>
+
+<div class="screen" id="death-screen">
+  <div class="screen-inner">
+    <h1>CARRIER LOST</h1>
+    <div id="death-epitaph">SIGNAL TERMINATED.</div>
+    <p class="blink">SIGNAL? [ENTER / SELECT]</p>
+  </div>
+</div>
+
+<div class="screen" id="win-screen">
+  <div class="screen-inner">
+    <pre id="win-text"></pre>
+    <p style="margin-top:26px" class="blink" id="win-continue" >PRESS ENTER / SELECT</p>
+  </div>
+</div>
+
+<div id="crt-frame"></div>
+
+<script src="src/math.js"></script>
+<script src="src/map.js"></script>
+<script src="src/render.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/enemy.js"></script>
+<script src="src/vr.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>
