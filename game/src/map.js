@@ -110,14 +110,20 @@
     placeSafe(3, 33);   // pre-exit corridor
     placeSafe(4, 33);
 
-    // Yellow laser alarm beams across key corridors (world metres)
-    // {x0,z0,x1,z1, y0,y1} — thin vertical sheet; player circle crossing triggers
+    // Yellow laser tripwires — float mid-air across corridor mouths (wall→wall).
+    // Axis-aligned segments in world metres; thin Y band so LiDAR paints a beam.
+    var ty0 = 0.95, ty1 = 1.35;
     markers.lasers = [
-      { x0: 8 * CELL, z0: 13.5 * CELL, x1: 8 * CELL, z1: 14.5 * CELL, y0: 0.4, y1: 2.6, id: 'L-STORAGE' },
-      { x0: 18 * CELL, z0: 6.5 * CELL, x1: 19 * CELL, z1: 6.5 * CELL, y0: 0.4, y1: 2.6, id: 'L-LAB' },
-      { x0: 28 * CELL, z0: 12.5 * CELL, x1: 29.5 * CELL, z1: 12.5 * CELL, y0: 0.5, y1: 2.4, id: 'L-MID' },
-      { x0: 36 * CELL, z0: 22.5 * CELL, x1: 36 * CELL, z1: 24.5 * CELL, y0: 0.4, y1: 2.6, id: 'L-GEN' },
-      { x0: 6 * CELL, z0: 31.5 * CELL, x1: 8 * CELL, z1: 31.5 * CELL, y0: 0.4, y1: 2.6, id: 'L-EXIT' }
+      // N–S choke at col 3 / row 10 (storage approach)
+      { x0: 3.05 * CELL, z0: 10.5 * CELL, x1: 3.95 * CELL, z1: 10.5 * CELL, y0: ty0, y1: ty1, id: 'L-STORAGE' },
+      // N–S choke at col 17 / row 10 (lab approach)
+      { x0: 17.05 * CELL, z0: 10.5 * CELL, x1: 17.95 * CELL, z1: 10.5 * CELL, y0: ty0, y1: ty1, id: 'L-LAB' },
+      // Wide gap cols 23–25 / row 10 (mid belt)
+      { x0: 23.05 * CELL, z0: 10.5 * CELL, x1: 25.95 * CELL, z1: 10.5 * CELL, y0: ty0, y1: ty1, id: 'L-MID' },
+      // Jack-in alcove mouth (N–S beam across doorway)
+      { x0: 35.0 * CELL, z0: 21.1 * CELL, x1: 35.0 * CELL, z1: 24.9 * CELL, y0: ty0, y1: ty1, id: 'L-GEN' },
+      // Exit shaft (cols 1–4), south of X — must cross to extract
+      { x0: 1.05 * CELL, z0: 33.5 * CELL, x1: 4.95 * CELL, z1: 33.5 * CELL, y0: ty0, y1: ty1, id: 'L-EXIT' }
     ];
 
     // Blast doors — start locked (extra solid cells on approaches to jack-in)
@@ -317,31 +323,40 @@
     return pts;
   }
 
-  // Ray–laser: return t if ray hits a laser segment AABB-ish vertical sheet, else -1
+  // Ray–laser: axis-aligned floating ribbon (thin vertical plane along the segment)
   function rayLaser(ox, oy, oz, dx, dy, dz, maxDist) {
     var best = -1;
+    var HALF = 0.04; // ribbon thickness so LiDAR can catch it
     for (var i = 0; i < markers.lasers.length; i++) {
       var L = markers.lasers[i];
-      var lx0 = Math.min(L.x0, L.x1), lx1 = Math.max(L.x0, L.x1);
-      var lz0 = Math.min(L.z0, L.z1), lz1 = Math.max(L.z0, L.z1);
-      // expand thin axis so a ray can hit a sheet
-      if (lx1 - lx0 < 0.15) { lx0 -= 0.08; lx1 += 0.08; }
-      if (lz1 - lz0 < 0.15) { lz0 -= 0.08; lz1 += 0.08; }
-      // slab intersection on Y then XZ box
-      var t0 = 0, t1 = maxDist;
-      if (Math.abs(dy) > 1e-8) {
-        var ty0 = (L.y0 - oy) / dy, ty1 = (L.y1 - oy) / dy;
-        if (ty0 > ty1) { var tmp = ty0; ty0 = ty1; ty1 = tmp; }
-        t0 = Math.max(t0, ty0); t1 = Math.min(t1, ty1);
-      } else if (oy < L.y0 || oy > L.y1) continue;
-      if (t0 >= t1) continue;
-      // sample mid-t against XZ box of the sheet
-      var tm = (t0 + t1) * 0.5;
-      if (tm <= 0 || tm > maxDist) continue;
-      var px = ox + dx * tm, pz = oz + dz * tm;
-      if (px >= lx0 && px <= lx1 && pz >= lz0 && pz <= lz1) {
-        if (best < 0 || tm < best) best = tm;
+      var ax = L.x0, az = L.z0, bx = L.x1, bz = L.z1;
+      var alongX = Math.abs(bx - ax) >= Math.abs(bz - az);
+      var tHit = -1;
+      if (alongX) {
+        // segment runs in X at constant Z — intersect plane z = az
+        if (Math.abs(dz) < 1e-8) continue;
+        var t = (az - oz) / dz;
+        if (t <= 0 || t > maxDist) continue;
+        var py = oy + dy * t, px = ox + dx * t;
+        if (py < L.y0 || py > L.y1) continue;
+        var x0 = Math.min(ax, bx), x1 = Math.max(ax, bx);
+        if (px < x0 || px > x1) continue;
+        if (Math.abs((oz + dz * t) - az) > HALF + 1e-6) continue;
+        tHit = t;
+      } else {
+        // segment runs in Z at constant X — intersect plane x = ax
+        if (Math.abs(dx) < 1e-8) continue;
+        t = (ax - ox) / dx;
+        if (t <= 0 || t > maxDist) continue;
+        py = oy + dy * t;
+        var pz = oz + dz * t;
+        if (py < L.y0 || py > L.y1) continue;
+        var z0 = Math.min(az, bz), z1 = Math.max(az, bz);
+        if (pz < z0 || pz > z1) continue;
+        if (Math.abs((ox + dx * t) - ax) > HALF + 1e-6) continue;
+        tHit = t;
       }
+      if (tHit > 0 && (best < 0 || tHit < best)) best = tHit;
     }
     return best;
   }
