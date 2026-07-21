@@ -543,6 +543,60 @@
     return dx * dx + dz * dz < range * range;
   }
 
+  // Rotate vector by quaternion (x,y,z,w)
+  function quatMulVec(qx, qy, qz, qw, x, y, z) {
+    var ix = qw * x + qy * z - qz * y;
+    var iy = qw * y + qz * x - qx * z;
+    var iz = qw * z + qx * y - qy * x;
+    var iw = -qx * x - qy * y - qz * z;
+    return [
+      ix * qw + iw * -qx + iy * -qz - iz * -qy,
+      iy * qw + iw * -qy + iz * -qx - ix * -qz,
+      iz * qw + iw * -qz + ix * -qy - iy * -qx
+    ];
+  }
+
+  // Pip-Boy / watch panel fixed to left controller (game-world model matrix)
+  function buildWristModel(wrist, bodyYaw) {
+    if (!wrist) return null;
+    var c = Math.cos(bodyYaw), s = Math.sin(bodyYaw);
+    var gx = player.x + c * wrist.localX - s * wrist.localZ;
+    var gy = wrist.y;
+    var gz = player.z + s * wrist.localX + c * wrist.localZ;
+
+    function axis(lx, ly, lz) {
+      var v = quatMulVec(wrist.qx, wrist.qy, wrist.qz, wrist.qw, lx, ly, lz);
+      return [c * v[0] - s * v[2], v[1], s * v[0] + c * v[2]];
+    }
+
+    var right = math.vnorm(axis(1, 0, 0));
+    var up0 = axis(0, 1, 0);
+    var fwd = axis(0, 0, -1);
+    // tilt panel toward the eyes (~55°)
+    var tilt = 0.96;
+    var ct = Math.cos(tilt), st = Math.sin(tilt);
+    var up = math.vnorm([
+      up0[0] * ct + fwd[0] * st,
+      up0[1] * ct + fwd[1] * st,
+      up0[2] * ct + fwd[2] * st
+    ]);
+    var normal = math.vnorm(math.vcross(right, up));
+    // re-orthogonalize right against up
+    right = math.vnorm(math.vcross(up, normal));
+
+    // sit on top/inner face of left controller
+    var off = axis(0.0, 0.045, 0.055);
+    var px = gx + off[0], py = gy + off[1], pz = gz + off[2];
+
+    var sx = 0.22, sy = 0.14; // metres — readable at arm's length
+    var m = new Float32Array(16);
+    m[0] = right[0] * sx; m[1] = right[1] * sx; m[2] = right[2] * sx; m[3] = 0;
+    m[4] = up[0] * sy; m[5] = up[1] * sy; m[6] = up[2] * sy; m[7] = 0;
+    m[8] = normal[0]; m[9] = normal[1]; m[10] = normal[2]; m[11] = 0;
+    m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
+    return m;
+  }
+
   function readMemo(i) {
     if (memos[i].read) return false;
     memos[i].read = true;
@@ -1038,6 +1092,9 @@
 
       if (CIR && CIR.isActive()) {
         if (vrInput && vrInput.interactPressed) CIR.rotateSelected();
+        if (vrInput && R.setWristModel) {
+          R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
+        }
         CIR.update(dt);
         updateExfil(dt);
         updateMsg(dt);
@@ -1058,11 +1115,15 @@
           } else {
             vrScanOrigin = null;
           }
+          if (R.setWristModel) {
+            R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
+          }
           if (vrInput.burstPressed) tryBurst();
           if (vrInput.interactPressed) interact();
         } else {
           vrScanOrigin = null;
           vrScanDirection = null;
+          if (R.setWristModel) R.setWristModel(null);
         }
 
         updateScanner(dt);
@@ -1140,6 +1201,7 @@
       trickleOn = false;
       vrScanOrigin = null;
       vrScanDirection = null;
+      if (R.setWristModel) R.setWristModel(null);
       if (NS.mic) NS.mic.stop();
       if (state === 'PLAY') {
         state = 'CONTROLS';

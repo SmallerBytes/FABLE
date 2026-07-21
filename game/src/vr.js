@@ -12,7 +12,8 @@
     moveX: 0, moveY: 0, heading: 0,
     bodyYaw: 0,
     trickle: false, burstPressed: false, interactPressed: false,
-    aimOrigin: null, aimDirection: null
+    aimOrigin: null, aimDirection: null,
+    wrist: null // left-controller grip pose in XR local space
   };
 
   function init(button) {
@@ -144,13 +145,16 @@
     currentInput.interactPressed = false;
     currentInput.aimOrigin = null;
     currentInput.aimDirection = null;
+    currentInput.wrist = null;
 
     var rightSource = null;
+    var leftSource = null;
     for (var i = 0; i < session.inputSources.length; i++) {
       var source = session.inputSources[i];
       var gp = source.gamepad;
       var axes = axesFor(gp);
       if (source.handedness === 'left') {
+        leftSource = source;
         currentInput.moveX = axes[0];
         currentInput.moveY = -axes[1];
       } else if (source.handedness === 'right') {
@@ -182,6 +186,20 @@
         var localDir = rotateVectorByQuaternion(0, 0, -1, q);
         currentInput.aimDirection = rotateLocalToWorld(localDir);
         currentInput.aimOrigin = { localX: p.x, y: p.y, localZ: p.z };
+      }
+    }
+
+    // Wristlink mounts on left grip (fallback: left target ray)
+    var wristSpace = leftSource && (leftSource.gripSpace || leftSource.targetRaySpace);
+    if (wristSpace) {
+      var wristPose = frame.getPose(wristSpace, referenceSpace);
+      if (wristPose) {
+        var wp = wristPose.transform.position;
+        var wq = wristPose.transform.orientation;
+        currentInput.wrist = {
+          localX: wp.x, y: wp.y, localZ: wp.z,
+          qx: wq.x, qy: wq.y, qz: wq.z, qw: wq.w
+        };
       }
     }
 

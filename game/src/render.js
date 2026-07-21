@@ -72,12 +72,13 @@
     '}'
   ].join('\n');
 
-  // Screen-space HUD for WebXR (DOM is not visible inside the headset)
+  // Wristlink / Pip-Boy panel — world-space textured quad (proper stereo)
   var HUD_VS = [
-    'attribute vec2 aPos;',
+    'attribute vec3 aPos;',
     'attribute vec2 aUv;',
+    'uniform mat4 uMVP;',
     'varying vec2 vUv;',
-    'void main(){ vUv = aUv; gl_Position = vec4(aPos, 0.0, 1.0); }'
+    'void main(){ vUv = aUv; gl_Position = uMVP * vec4(aPos, 1.0); }'
   ].join('\n');
   var HUD_FS = [
     'precision mediump float;',
@@ -85,7 +86,7 @@
     'uniform sampler2D uTex;',
     'void main(){',
     '  vec4 c = texture2D(uTex, vUv);',
-    '  if (c.a < 0.04) discard;',
+    '  if (c.a < 0.05) discard;',
     '  gl_FragColor = c;',
     '}'
   ].join('\n');
@@ -169,6 +170,7 @@
   var hudCanvas = null, hudCtx = null, hudTex = null, hudVbo = null;
   var hudState = { hint: '', obj: '', aux: 0, timer: '', chg: '' };
   var hudDirty = true;
+  var wristModel = null; // Float32Array(16) game-world model matrix
 
   function init(cnv) {
     canvas = cnv;
@@ -203,6 +205,7 @@
     hudAttrs.aPos = gl.getAttribLocation(hudProg, 'aPos');
     hudAttrs.aUv = gl.getAttribLocation(hudProg, 'aUv');
     hudUnis.uTex = gl.getUniformLocation(hudProg, 'uTex');
+    hudUnis.uMVP = gl.getUniformLocation(hudProg, 'uMVP');
 
     vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
@@ -212,21 +215,21 @@
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVbo);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 
-    // NDC panel centered in view (x,y,u,v) — kept inward so Quest lenses don't clip it
+    // Unit quad in local space (scaled by wrist model). x=width, y=height, z=0 face.
     hudVbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, hudVbo);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -0.72, -0.22, 0, 1,
-       0.72, -0.22, 1, 1,
-      -0.72,  0.58, 0, 0,
-       0.72, -0.22, 1, 1,
-       0.72,  0.58, 1, 0,
-      -0.72,  0.58, 0, 0
+      -0.5, -0.5, 0, 0, 1,
+       0.5, -0.5, 0, 1, 1,
+      -0.5,  0.5, 0, 0, 0,
+       0.5, -0.5, 0, 1, 1,
+       0.5,  0.5, 0, 1, 0,
+      -0.5,  0.5, 0, 0, 0
     ]), gl.STATIC_DRAW);
 
     hudCanvas = document.createElement('canvas');
-    hudCanvas.width = 1024;
-    hudCanvas.height = 512;
+    hudCanvas.width = 640;
+    hudCanvas.height = 400;
     hudCtx = hudCanvas.getContext('2d');
     hudTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, hudTex);
@@ -234,7 +237,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 512, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 640, 400, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     resize();
   }
@@ -362,47 +365,70 @@
     gl.disableVertexAttribArray(postAttrs.aPos);
   }
 
-  // WebXR renders directly into the headset framebuffer. The desktop CRT
-  // post-pass is deliberately skipped because Quest already applies lens
-  // distortion and a second barrel pass is uncomfortable in-headset.
+  // WebXR: wristlink panel in game world (stereo-correct, look at left controller)
   function paintHud() {
     if (!hudCtx) return;
     var ctx = hudCtx;
     var w = hudCanvas.width, h = hudCanvas.height;
     ctx.clearRect(0, 0, w, h);
-    ctx.textAlign = 'center';
+
+    // chassis
+    ctx.fillStyle = 'rgba(4, 18, 10, 0.92)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(124,255,155,0.85)';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(8, 8, w - 16, h - 16);
+    ctx.strokeStyle = 'rgba(63,138,85,0.7)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(18, 18, w - 36, h - 36);
+
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(124,255,155,0.95)';
-    ctx.shadowColor = 'rgba(124,255,155,0.85)';
-    ctx.shadowBlur = 10;
+    ctx.fillStyle = 'rgba(124,255,155,0.98)';
+    ctx.font = 'bold 28px Consolas, monospace';
+    ctx.fillText('RD-9 WRISTLINK', 36, 48);
+    ctx.font = '22px Consolas, monospace';
+    ctx.fillStyle = 'rgba(124,255,155,0.7)';
+    ctx.fillText(hudState.timer || 'T+00:00', 36, 84);
 
-    ctx.font = 'bold 36px Consolas, monospace';
-    if (hudState.timer) ctx.fillText(hudState.timer, w * 0.18, 48);
-    if (hudState.obj) ctx.fillText(hudState.obj, w * 0.82, 48);
-    if (hudState.chg) {
-      ctx.font = '28px Consolas, monospace';
-      ctx.fillText('CHG ' + hudState.chg, w * 0.18, 96);
-    }
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(124,255,155,0.98)';
+    ctx.font = 'bold 26px Consolas, monospace';
+    ctx.fillText(hudState.obj || '', w - 36, 48);
+    ctx.font = '22px Consolas, monospace';
+    ctx.fillStyle = 'rgba(124,255,155,0.75)';
+    ctx.fillText('CHG ' + (hudState.chg || ''), w - 36, 84);
 
-    // audio / emission meter
+    // audio / signature bar
     var aux = Math.max(0, Math.min(1, hudState.aux || 0));
-    var bx = w * 0.28, by = h - 70, bw = w * 0.44, bh = 22;
-    ctx.shadowBlur = 0;
+    var bx = 36, by = 120, bw = w - 72, bh = 28;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(124,255,155,0.85)';
+    ctx.font = 'bold 20px Consolas, monospace';
+    ctx.fillText('AUDIO / SIGNATURE', bx, by - 14);
     ctx.strokeStyle = 'rgba(63,138,85,0.95)';
     ctx.lineWidth = 2;
     ctx.strokeRect(bx, by, bw, bh);
-    ctx.fillStyle = aux > 0.55 ? 'rgba(255,68,68,0.9)' : 'rgba(124,255,155,0.9)';
-    ctx.fillRect(bx + 2, by + 2, Math.max(0, (bw - 4) * aux), bh - 4);
-    ctx.fillStyle = 'rgba(124,255,155,0.95)';
-    ctx.font = '22px Consolas, monospace';
-    ctx.shadowBlur = 8;
-    ctx.fillText('AUDIO / SIGNATURE', w * 0.5, by - 18);
+    ctx.fillStyle = aux > 0.55 ? 'rgba(255,80,80,0.95)' : 'rgba(124,255,155,0.95)';
+    ctx.fillRect(bx + 3, by + 3, Math.max(0, (bw - 6) * aux), bh - 6);
 
-    if (hudState.hint) {
-      ctx.fillStyle = 'rgba(255,179,71,0.98)';
-      ctx.shadowColor = 'rgba(255,179,71,0.9)';
-      ctx.font = 'bold 42px Consolas, monospace';
-      ctx.fillText(hudState.hint, w * 0.5, h * 0.42);
+    // prompt band
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(28, h - 130, w - 56, 96);
+    ctx.strokeStyle = 'rgba(255,179,71,0.55)';
+    ctx.strokeRect(28, h - 130, w - 56, 96);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,179,71,0.98)';
+    ctx.font = 'bold 30px Consolas, monospace';
+    var hint = hudState.hint || 'RAISE LEFT WRIST · CHECK STATUS';
+    // wrap long hints
+    if (hint.length > 34) {
+      var mid = hint.lastIndexOf(' ', 34);
+      if (mid < 12) mid = 34;
+      ctx.fillText(hint.slice(0, mid), w * 0.5, h - 92);
+      ctx.fillText(hint.slice(mid).trim(), w * 0.5, h - 56);
+    } else {
+      ctx.fillText(hint, w * 0.5, h - 74);
     }
     hudDirty = false;
   }
@@ -424,26 +450,33 @@
     hudState = next;
   }
 
-  function drawVRHud() {
-    if (!hudProg || !hudTex) return;
+  function setWristModel(m) {
+    wristModel = m || null;
+  }
+
+  function drawVRHud(proj, view) {
+    if (!hudProg || !hudTex || !wristModel) return;
     if (hudDirty) {
       paintHud();
       gl.bindTexture(gl.TEXTURE_2D, hudTex);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hudCanvas);
     }
+    var math = NS.math;
+    var mvp = math.mat4Multiply(proj, math.mat4Multiply(view, wristModel));
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(hudProg);
+    gl.uniformMatrix4fv(hudUnis.uMVP, false, mvp);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, hudTex);
     gl.uniform1i(hudUnis.uTex, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, hudVbo);
     gl.enableVertexAttribArray(hudAttrs.aPos);
     gl.enableVertexAttribArray(hudAttrs.aUv);
-    gl.vertexAttribPointer(hudAttrs.aPos, 2, gl.FLOAT, false, 16, 0);
-    gl.vertexAttribPointer(hudAttrs.aUv, 2, gl.FLOAT, false, 16, 8);
+    gl.vertexAttribPointer(hudAttrs.aPos, 3, gl.FLOAT, false, 20, 0);
+    gl.vertexAttribPointer(hudAttrs.aUv, 2, gl.FLOAT, false, 20, 12);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disableVertexAttribArray(hudAttrs.aPos);
     gl.disableVertexAttribArray(hudAttrs.aUv);
@@ -463,7 +496,7 @@
       var v = views[i];
       gl.viewport(v.viewport.x, v.viewport.y, v.viewport.width, v.viewport.height);
       drawPoints(v.projection, v.view, now, 300000);
-      drawVRHud();
+      drawVRHud(v.projection, v.view);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
@@ -477,7 +510,8 @@
     CAPACITY: CAPACITY,
     init: init, resize: resize,
     addPoint: addPoint, pointCount: pointCount, clearPoints: clearPoints,
-    render: render, renderXR: renderXR, setVRHud: setVRHud,
+    render: render, renderXR: renderXR,
+    setVRHud: setVRHud, setWristModel: setWristModel,
     getContext: function () { return gl; },
     makeXRCompatible: makeXRCompatible
   };
