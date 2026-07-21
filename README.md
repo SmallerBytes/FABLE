@@ -6,13 +6,12 @@ PROJECT HOLLOW / BUILD 0.7.2 / TAPE 7 OF 9
 RECOVERED 2026 — SITE C SUBLEVEL STORAGE
 ```
 
-A first-person survival horror prototype played in **total darkness**. The
-only light is a LiDAR scanner: every point on screen is a laser return you
-fired yourself. The creature hunting you is blind — it comes to the sound of
-your scanner. **Seeing and surviving are the same resource, spent against
-each other.**
+A first-person **cyber raid** prototype played in total darkness. The only
+vision is a LiDAR scanner: every point is a return you fired. Security is
+blind but hears emissions — scans, footsteps, voice, alarms.
 
-No combat. Recover 3 fuses, power the generator, reach the freight door.
+No combat. Recover access keys, unlock blast doors, jack into the core,
+then board the chopper LZ before it departs.
 
 ## Run it
 
@@ -25,19 +24,21 @@ No build step, no dependencies, no network. Either:
 Headphones strongly recommended. Sound is not decoration here — it is the
 primary threat-detection system.
 
-## SOS Mission Command (two-person)
+## SOS Mission Command (two-person cyber raid)
 
 HOLLOW supports a Squadron Officer School-style exercise: one **Operator** in
 VR, one **Mission Director** with a printed/PDF map directing by voice.
 
 - Exercise guide: [`docs/SOS_Exercise.md`](docs/SOS_Exercise.md)
 - Mission map PDF: [`game/assets/HOLLOW_Mission_Map.pdf`](game/assets/HOLLOW_Mission_Map.pdf)
-- Printable diagram: [`game/map-print.html`](game/map-print.html) (Print → Save as PDF)
+- Printable diagram: [`game/map-print.html`](game/map-print.html)
 - Live game: https://smallerbytes.github.io/FABLE/game/
 
-**Safe harbors** paint bright green on LiDAR and block Custodian kill/chase.
-**Yellow lasers** trigger a security alarm and force investigation.
-**Headset microphone** speech contributes to the noise model (EMCON).
+**Objective:** recover access keys → unlock blast doors → jack-in circuit puzzle →
+board the flashing **LZ** before the chopper departs.
+
+**Harbor green** = Faraday shelter · **Yellow** = tripwire · **White flash** = LZ.
+**Headset mic** speech contributes to signature (EMCON).
 
 ## Quest 2 / WebXR
 

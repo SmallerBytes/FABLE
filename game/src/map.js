@@ -52,7 +52,20 @@
   var grid = [];
   var safe = [];
   var ROWS = 0, COLS = 0;
-  var markers = { fuses: [], memos: [], P: null, C: null, G: null, X: null, safes: [], lasers: [] };
+  var markers = { fuses: [], memos: [], P: null, C: null, G: null, X: null, safes: [], lasers: [], doors: [] };
+  var doorSolid = {}; // key "c,r" -> true while locked
+
+  function doorKey(c, r) { return c + ',' + r; }
+
+  function setDoorSolid(c, r, locked) {
+    var k = doorKey(c, r);
+    if (locked) doorSolid[k] = true;
+    else delete doorSolid[k];
+  }
+
+  function isDoorSolid(c, r) {
+    return !!doorSolid[doorKey(c, r)];
+  }
 
   function parse() {
     var rows = ASCII.concat(ASCII2);
@@ -106,6 +119,23 @@
       { x0: 36 * CELL, z0: 22.5 * CELL, x1: 36 * CELL, z1: 24.5 * CELL, y0: 0.4, y1: 2.6, id: 'L-GEN' },
       { x0: 6 * CELL, z0: 31.5 * CELL, x1: 8 * CELL, z1: 31.5 * CELL, y0: 0.4, y1: 2.6, id: 'L-EXIT' }
     ];
+
+    // Blast doors — start locked (extra solid cells on approaches to jack-in)
+    markers.doors = [
+      { id: 'D1', c: 16, r: 13, locked: true },  // mid-map west approach
+      { id: 'D2', c: 26, r: 27, locked: true },  // south corridor toward console
+      { id: 'D3', c: 34, r: 23, locked: true }   // jack-in antechamber
+    ];
+    doorSolid = {};
+    markers.doors.forEach(function (d) {
+      if (!grid[d.r] || grid[d.r][d.c]) {
+        throw new Error('HOLLOW door on solid/invalid cell ' + d.id + ' @' + d.c + ',' + d.r);
+      }
+      setDoorSolid(d.c, d.r, true);
+      d.x = (d.c + 0.5) * CELL;
+      d.z = (d.r + 0.5) * CELL;
+    });
+    markers.keys = markers.fuses;
   }
 
   function placeSafe(c, r) {
@@ -132,6 +162,7 @@
 
   function isSolidCell(c, r) {
     if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return true;
+    if (isDoorSolid(c, r)) return true;
     return grid[r][c];
   }
   function isSolidAt(x, z) {
@@ -331,6 +362,32 @@
     return null;
   }
 
+  function unlockDoor(id) {
+    for (var i = 0; i < markers.doors.length; i++) {
+      var d = markers.doors[i];
+      if (d.id === id || (!id && d.locked)) {
+        if (!d.locked) continue;
+        d.locked = false;
+        setDoorSolid(d.c, d.r, false);
+        return d;
+      }
+    }
+    return null;
+  }
+
+  function resetDoors() {
+    markers.doors.forEach(function (d) {
+      d.locked = true;
+      setDoorSolid(d.c, d.r, true);
+    });
+  }
+
+  function doorsOpenCount() {
+    var n = 0;
+    markers.doors.forEach(function (d) { if (!d.locked) n++; });
+    return n;
+  }
+
   NS.map = {
     CELL: CELL, WALL_H: WALL_H, ROWS: function () { return ROWS; }, COLS: function () { return COLS; },
     markers: markers,
@@ -338,7 +395,8 @@
     isSafeCell: isSafeCell, isSafeAt: isSafeAt,
     raycast: raycast, wallsBetween: wallsBetween, astar: astar,
     moveWithCollision: moveWithCollision, patrolWaypoints: patrolWaypoints,
-    rayLaser: rayLaser, laserHitPlayer: laserHitPlayer, asciiRows: asciiRows
+    rayLaser: rayLaser, laserHitPlayer: laserHitPlayer, asciiRows: asciiRows,
+    unlockDoor: unlockDoor, resetDoors: resetDoors, doorsOpenCount: doorsOpenCount
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));

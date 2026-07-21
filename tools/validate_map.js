@@ -12,6 +12,14 @@ if (!mk.G) errors.push('missing G');
 if (!mk.X) errors.push('missing X');
 if (mk.fuses.filter(Boolean).length !== 3) errors.push('fuses found: ' + mk.fuses.filter(Boolean).length);
 if (mk.memos.length !== 4) errors.push('memos found: ' + mk.memos.length);
+if (!mk.doors || mk.doors.length !== 3) errors.push('doors found: ' + (mk.doors ? mk.doors.length : 0));
+
+// With doors locked, console should be unreachable
+var blocked = M.astar(mk.P.x, mk.P.z, mk.G.x, mk.G.z);
+if (blocked) errors.push('console reachable while doors locked');
+
+// Unlock for reachability checks
+mk.doors.forEach(function (d) { M.unlockDoor(d.id); });
 
 // flood fill from P
 var ROWS = M.ROWS(), COLS = M.COLS(), CELL = M.CELL;

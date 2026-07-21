@@ -36,53 +36,69 @@
   var NOISE_LASER = 32;
   var LASER_COOLDOWN = 10;
 
+  var CHOPPER_INBOUND_S = 40;
+  var CHOPPER_LINGER_S = 25;
+  var LZ_RADIUS = 3.5;
+  var NOISE_UPLINK = 40;
+
   var MEMO_TEXTS = [
-    "DR. OKONKWO, ACOUSTICS — IT DOESN'T HAVE EYES. IT NEVER HAD EYES. MARCHETTI SAYS IT SEES THE ROOM THE WAY OUR RANGEFINDER DOES. PULSE AND RETURN. IT LIKED THE RD-9 TESTS. IT WOULD STAND AT THE GLASS. LISTENING.",
-    "MARCHETTI, CONTAINMENT — DAY 3 WITHOUT POWER. WE MOVE WHEN IT MOVES. DO NOT USE THE RANGING UNIT INDOORS. I WATCHED IT TAKE BECK MID-SWEEP. IT COMES TO THE CLICKING. IT COMES FAST.",
-    "UNSIGNED, MESS HALL — GENERATOR FUSES PULLED AND HIDDEN. WE DID IT ON PURPOSE. THE EXIT DOOR HELD IT IN. IF YOU POWER THE DOOR YOU ARE OPENING THE DOOR. DECIDE IF GOING HOME IS WORTH THAT.",
-    "DR. OKONKWO, FINAL — IT ISN'T HUNTING US. IT'S CALIBRATING. EVERY SCREAM IS A RETURN PULSE. IT IS BUILDING A MAP OF US. BE NOTHING. BE NOWHERE. BE QUIET."
+    "SIGINT FRAGMENT — TARGET NODE UNDER EMCON BLACKOUT. ACTIVE SCANNING IS DETECTABLE. SECURITY HOMES ON EMISSIONS.",
+    "OPS NOTE — ACCESS KEYS SCATTERED IN THE WING. EACH KEY OPENS ONE BLAST DOOR ON THE APPROACH TO THE JACK-IN CONSOLE.",
+    "BRIEF ADDENDUM — AFTER UPLINK, EXFIL LZ GOES HOT. CHOPPER INBOUND THEN ON-STATION. IF YOU MISS THE WINDOW YOU ARE LEFT BEHIND.",
+    "SECURITY PROFILE — COUNTER-INTRUSION UNIT IS BLIND BUT ACOUSTIC. FARADAY HARBORS DAMPEN YOUR SIGNATURE. TRIPWIRES ALARM THE GRID."
   ];
 
   var BOOT_LINES = [
-    "FABLE DYNAMICS RD-9 RANGING WORKSTATION",
-    "ROM 0.7.2  (C) 1988 FABLE DYNAMICS / APPLIED OPTICS DIV",
+    "RD-9 RANGING PACKAGE — FIELD CYBER RAID LOADOUT",
+    "BUILD 0.9.1 / MISSION SUPPORT OVERLAY",
     "",
     "SELF TEST ............. OK",
-    "PHOSPHOR ARRAY ........ OK",
     "PULSE HEAD ............ OK",
-    "POINT STORE 700000 .... OK",
-    "ACOUSTIC BAFFLE ....... MISSING",
+    "POINT STORE ........... OK",
+    "COMMS BAFFLE .......... DEGRADED",
     "",
-    "DISPATCH 88-10-22 / OPERATOR HALSE, W.",
-    "SITE C SUBLEVEL 2 IS DARK. GRID DOWN 11 DAYS.",
-    "RECOVER 3 FUSES. RESTORE GENERATOR.",
-    "EXIT VIA FREIGHT DOOR. SURVEY TEAM NOT RESPONDING.",
-    "PROCEED ALONE."
+    "TASKING: INFILTRATE ENEMY C2 NODE (BLACKOUT).",
+    "RECOVER 3 ACCESS KEYS. UNLOCK BLAST DOORS.",
+    "JACK INTO CORE ROUTING MATRIX. ESTABLISH UPLINK.",
+    "EXFIL TO LZ WHEN CHOPPER IS ON STATION.",
+    "MINIMIZE EMISSIONS. SECURITY WILL HEAR YOU."
   ];
 
   var WIN_LINES = [
-    "FREIGHT DOOR CYCLED. SURFACE REACHED 06:12.",
-    "OPERATOR HALSE RECOVERED. UNIT RD-9 RECOVERED.",
+    "UPLINK CONFIRMED. PAYLOAD DELIVERED.",
+    "OPERATOR EXTRACTED VIA LZ. CHOPPER AWAY.",
     "",
-    "SITE C SEALED PERMANENT BY ORDER F.D. BOARD 88-11-02.",
+    "MISSION SUCCESS — NODE COMPROMISED.",
     "",
-    "NOTE APPENDED 1989:",
-    "SPECIMEN MANIFEST LISTS TWO.",
+    "DEBRIEF: SIGNATURE DISCIPLINE AND SHARED",
+    "UNDERSTANDING DECIDED THE RUN.",
     "",
-    "( ARCHIVE TAPE 7 ENDS )"
+    "( END TRANSMISSION )"
+  ];
+
+  var FAIL_LEFT_LINES = [
+    "CHOPPER DEPARTED. LZ COLD.",
+    "OPERATOR NOT ON BOARD.",
+    "",
+    "MISSION FAILURE — LEFT BEHIND.",
+    "",
+    "THE UPLINK HELD. THE EXTRACT DID NOT."
   ];
 
   // ---- state ----
-  var state = 'BOOT'; // BOOT | CONTROLS | PLAY | DYING | DEAD | WIN
+  var state = 'BOOT'; // BOOT | CONTROLS | PLAY | DYING | DEAD | WIN | LEFT
   var player = { x: 0, z: 0, yaw: 0, pitch: 0, eye: EYE_STAND };
   var keys = {};
   var trickleOn = false;
   var vrScanOrigin = null, vrScanDirection = null;
   var trickleNoiseTimer = 0;
   var burst = { active: false, t: 0, cooldown: 0 };
-  var fuses = [], memos = [];
-  var fusesCollected = 0, fusesSeated = 0, seatLockout = 0;
-  var powered = false, beaconTimer = 0;
+  var accessKeys = [], memos = [];
+  var keysCollected = 0, doorsOpen = 0;
+  var uplinkDone = false;
+  var exfilPhase = 'NONE'; // NONE | INBOUND | ON_STATION | GONE
+  var exfilTimer = 0;
+  var beaconTimer = 0;
   var auxLoud = 0, recentLoud = 0;
   var tearTimer = 0, floodLevel = 0, dieTimer = 0;
   var glitchLevel = 0, glitchPop = 0, popTimer = 5;
@@ -91,7 +107,8 @@
   var sens = 0.0022, reducedFlash = false;
   var deathCause = 'quiet';
   var clickTickFade = 0;
-  var laserCooldown = {};   // id -> remaining seconds
+  var laserCooldown = {};
+  var CIR = null;
 
   // typewriter event line
   var msgQueue = [], curMsg = null, msgChars = 0, msgHold = 0;
@@ -103,6 +120,7 @@
 
   function init() {
     M = NS.map; R = NS.render; A = NS.audio; EN = NS.enemy; VR = NS.vr; math = NS.math;
+    CIR = NS.circuit;
 
     el.canvas = $('glcanvas');
     el.hud = $('hud');
@@ -131,13 +149,16 @@
       keys[e.code] = true;
       if (e.code === 'Enter') {
         if (state === 'BOOT') { finishBoot(); }
-        else if (state === 'DEAD') { showScreen('controls'); state = 'CONTROLS'; }
+        else if (state === 'DEAD' || state === 'LEFT') { showScreen('controls'); state = 'CONTROLS'; }
         else if (state === 'WIN') { state = 'BOOT'; startBootType(); }
       }
       if (e.code === 'Space') {
-        if (state === 'PLAY') { e.preventDefault(); tryBurst(); }
+        if (state === 'PLAY' && !(CIR && CIR.isActive())) { e.preventDefault(); tryBurst(); }
       }
-      if (e.code === 'KeyE' && state === 'PLAY') interact();
+      if (e.code === 'KeyE' && state === 'PLAY') {
+        if (CIR && CIR.isActive()) CIR.rotateSelected();
+        else interact();
+      }
     });
     window.addEventListener('keyup', function (e) { keys[e.code] = false; });
 
@@ -169,7 +190,10 @@
       if (state === 'BOOT' && e.target.tagName !== 'INPUT') finishBoot();
     });
     el.death.addEventListener('click', function () {
-      if (state === 'DEAD') { showScreen('controls'); state = 'CONTROLS'; }
+      if (state === 'DEAD' || state === 'LEFT') {
+        $('death-screen').querySelector('h1').textContent = 'CARRIER LOST';
+        showScreen('controls'); state = 'CONTROLS';
+      }
     });
     el.win.addEventListener('click', function () {
       if (state === 'WIN') { state = 'BOOT'; startBootType(); }
@@ -244,22 +268,25 @@
   function startRun() {
     runActive = true;
     if (A.stopAllTransient) A.stopAllTransient();
+    if (CIR) CIR.close();
     R.clearPoints();
     EN.reset();
+    M.resetDoors();
     math.srand(0x1988 ^ (Date.now() & 0xffff));
     player.x = M.markers.P.x; player.z = M.markers.P.z;
     player.yaw = 0; player.pitch = 0; player.eye = EYE_STAND;
-    fuses = M.markers.fuses.map(function (f) { return { x: f.x, z: f.z, taken: false }; });
+    accessKeys = M.markers.fuses.map(function (f) { return { x: f.x, z: f.z, taken: false }; });
     memos = M.markers.memos.map(function (m, i) { return { x: m.x, z: m.z, read: false, i: i }; });
-    fusesCollected = 0; fusesSeated = 0; seatLockout = 0;
-    powered = false; beaconTimer = 0;
+    keysCollected = 0; doorsOpen = 0;
+    uplinkDone = false;
+    exfilPhase = 'NONE'; exfilTimer = 0;
     burst.active = false; burst.t = 0; burst.cooldown = 0;
     trickleOn = false; auxLoud = 0; recentLoud = 0;
     floodLevel = 0; runTime = 0; deathCause = 'quiet';
     glitchLevel = 0; glitchPop = 0; popTimer = 5;
     laserCooldown = {};
     msgQueue = []; curMsg = null;
-    queueMsg('RD-9 RANGING ACTIVE. RETURNS ARE TRUTH.', '');
+    queueMsg('RD-9 RAID OVERLAY ACTIVE. MINIMIZE EMISSIONS.', '');
   }
 
   function onKill() {
@@ -277,33 +304,72 @@
   function finishDeath() {
     runActive = false;
     state = 'DEAD';
+    if (CIR) CIR.close();
     if (A.sting) A.sting(false);
     document.exitPointerLock();
     if (VR.active()) VR.end();
-    // hard-cut any lingering chase layers; death one-shot self-ends by 4s
     setTimeout(function () {
-      if (state === 'DEAD' || state === 'CONTROLS' || state === 'BOOT') {
+      if (state === 'DEAD' || state === 'CONTROLS' || state === 'BOOT' || state === 'LEFT') {
         if (A.stopAllTransient) A.stopAllTransient();
       }
     }, 4200);
     var lines = {
-      sweep: 'MID-SWEEP. LIKE BECK.',
-      loud: 'YOU LIT THE DARK. THE DARK ANSWERED.',
-      steps: 'IT HEARD YOUR FOOTSTEPS THREE ROOMS AWAY.',
-      quiet: 'YOU WERE QUIET. IT HEARD YOUR HEART.'
+      sweep: 'MID-SWEEP. SECURITY LOCKED YOUR SIGNATURE.',
+      loud: 'YOU LIT THE DARK. THE GRID ANSWERED.',
+      steps: 'FOOTSTEPS GAVE YOU AWAY THREE HALLS OUT.',
+      quiet: 'YOU WERE QUIET. IT STILL HEARD YOUR HEART.'
     };
     el.epitaph.textContent = lines[deathCause];
     showScreen('death');
   }
 
+  function failLeftBehind() {
+    runActive = false;
+    state = 'LEFT';
+    exfilPhase = 'GONE';
+    if (CIR) CIR.close();
+    if (A.sting) A.sting(false);
+    if (A.chopperStop) A.chopperStop();
+    document.exitPointerLock();
+    if (VR.active()) VR.end();
+    el.epitaph.textContent = 'CHOPPER DEPARTED. YOU WERE NOT ON THE PAD.';
+    $('death-screen').querySelector('h1').textContent = 'LEFT BEHIND';
+    showScreen('death');
+    if (A.stopAllTransient) {
+      setTimeout(function () { if (A.stopAllTransient) A.stopAllTransient(); }, 2500);
+    }
+  }
+
   function winGame() {
     runActive = false;
     state = 'WIN';
+    if (CIR) CIR.close();
+    if (A.chopperStop) A.chopperStop();
     document.exitPointerLock();
     if (VR.active()) VR.end();
     el.winText.textContent = WIN_LINES.join('\n');
     showScreen('win');
     A.sting(false);
+  }
+
+  function startExfil() {
+    uplinkDone = true;
+    exfilPhase = 'INBOUND';
+    exfilTimer = CHOPPER_INBOUND_S;
+    if (A.uplinkSurge) A.uplinkSurge();
+    else if (A.generatorRoar) A.generatorRoar();
+    if (A.chopperInbound) A.chopperInbound();
+    queueMsg('UPLINK ESTABLISHED — CHOPPER INBOUND', 'amber', 5);
+    EN.state.agitation = 100;
+    EN.hear(M.markers.G.x, M.markers.G.z, NOISE_UPLINK, now, true);
+    EN.forceChase();
+  }
+
+  function onCircuitTimeout() {
+    queueMsg('ROUTING LOCKOUT — GRID ALARM', 'red', 3);
+    A.securityAlarm();
+    EN.hear(M.markers.G.x, M.markers.G.z, NOISE_LASER, now, true);
+    EN.forceInvestigate(M.markers.G.x, M.markers.G.z);
   }
 
   // ------------------------------------------------------------------
@@ -353,9 +419,9 @@
       if (t > 0 && t < bestT) { bestT = t; color = C_RED; life = ENEMY_POINT_LIFE; }
     }
     // items
-    for (i = 0; i < fuses.length; i++) {
-      if (fuses[i].taken) continue;
-      t = raySphere(ox, oy, oz, dx, dy, dz, { x: fuses[i].x, y: 0.9, z: fuses[i].z, r: 0.45 });
+    for (i = 0; i < accessKeys.length; i++) {
+      if (accessKeys[i].taken) continue;
+      t = raySphere(ox, oy, oz, dx, dy, dz, { x: accessKeys[i].x, y: 0.9, z: accessKeys[i].z, r: 0.45 });
       if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
     }
     for (i = 0; i < memos.length; i++) {
@@ -363,7 +429,14 @@
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: memos[i].x, y: 0.7, z: memos[i].z, r: 0.4 });
       if (t > 0 && t < bestT) { bestT = t; color = C_CYAN; life = POINT_LIFE; }
     }
-    if (fusesSeated < 3) {
+    // locked blast doors
+    for (i = 0; i < M.markers.doors.length; i++) {
+      var door = M.markers.doors[i];
+      if (!door.locked) continue;
+      t = raySphere(ox, oy, oz, dx, dy, dz, { x: door.x, y: 1.2, z: door.z, r: 0.85 });
+      if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
+    }
+    if (!uplinkDone) {
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: M.markers.G.x, y: 1.1, z: M.markers.G.z, r: 0.7 });
       if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
     }
@@ -486,13 +559,13 @@
     dx /= fl; dz /= fl;
     var best = null, bestDot = VR_AIM_DOT;
     var i, tfx, tfz, dist, dot;
-    for (i = 0; i < fuses.length; i++) {
-      if (fuses[i].taken) continue;
-      tfx = fuses[i].x - ox; tfz = fuses[i].z - oz;
+    for (i = 0; i < accessKeys.length; i++) {
+      if (accessKeys[i].taken) continue;
+      tfx = accessKeys[i].x - ox; tfz = accessKeys[i].z - oz;
       dist = Math.sqrt(tfx * tfx + tfz * tfz);
       if (dist > VR_AIM_MAX) continue;
       dot = (tfx * dx + tfz * dz) / dist;
-      if (dot >= bestDot) { bestDot = dot; best = { kind: 'fuse', i: i, dist: dist }; }
+      if (dot >= bestDot) { bestDot = dot; best = { kind: 'key', i: i, dist: dist }; }
     }
     for (i = 0; i < memos.length; i++) {
       if (memos[i].read) continue;
@@ -505,7 +578,18 @@
     return best;
   }
 
+  function takeKey(i) {
+    if (accessKeys[i].taken) return;
+    accessKeys[i].taken = true;
+    keysCollected++;
+    EN.addAgitationFloor(15);
+    A.fuseChime();
+    emitNoise(NOISE_INTERACT);
+    queueMsg('ACCESS KEY RECOVERED ' + keysCollected + '/3', 'amber');
+  }
+
   function interact() {
+    if (CIR && CIR.isActive()) { CIR.rotateSelected(); return; }
     var range = interactRange();
 
     if (inVR()) {
@@ -514,76 +598,74 @@
         readMemo(pick.i);
         return;
       }
-      if (pick && pick.kind === 'fuse' && pick.dist <= range) {
-        fuses[pick.i].taken = true;
-        fusesCollected++;
-        EN.addAgitationFloor(15);
-        A.fuseChime();
-        emitNoise(NOISE_INTERACT);
-        queueMsg('FUSE RECOVERED ' + fusesCollected + '/3', 'amber');
+      if (pick && pick.kind === 'key' && pick.dist <= range) {
+        takeKey(pick.i);
         return;
       }
     }
 
-    // memos (desktop walk-over is in updateItems; VR can also press interact while close)
     for (var m = 0; m < memos.length; m++) {
       if (!memos[m].read && near(memos[m].x, memos[m].z, memoRange())) {
         if (readMemo(m)) return;
       }
     }
 
-    // fuse pickup
-    for (var i = 0; i < fuses.length; i++) {
-      if (!fuses[i].taken && near(fuses[i].x, fuses[i].z, range)) {
-        fuses[i].taken = true;
-        fusesCollected++;
-        EN.addAgitationFloor(15);            // GDD §5.4 — endgame pressure
-        A.fuseChime();
-        emitNoise(NOISE_INTERACT);
-        queueMsg('FUSE RECOVERED ' + fusesCollected + '/3', 'amber');
+    for (var i = 0; i < accessKeys.length; i++) {
+      if (!accessKeys[i].taken && near(accessKeys[i].x, accessKeys[i].z, range)) {
+        takeKey(i);
         return;
       }
     }
-    // generator seating
-    if (near(M.markers.G.x, M.markers.G.z, range + 0.5)) {
-      if (seatLockout > 0) return;
-      if (fusesSeated >= fusesCollected) {
-        queueMsg(fusesCollected >= 3 ? 'SOCKET JAMMED' : 'NO FUSE IN HAND', '');
-        return;
-      }
-      fusesSeated++;
-      seatLockout = 1.5;                     // forced noise ritual (GDD §6.1)
-      A.clunk(0);
-      emitNoise(NOISE_INTERACT);
-      if (fusesSeated < 3) {
-        queueMsg('FUSE SEATED ' + fusesSeated + '/3', 'amber');
-      } else {
-        powerOn();
-      }
-      return;
-    }
-    // exit door
-    if (near(M.markers.X.x, M.markers.X.z, range + 0.4)) {
-      if (!powered) {
-        queueMsg('DOOR DEAD — NO POWER', 'red');
-        emitNoise(NOISE_INTERACT);
-        return;
-      }
-      A.doorGrind();
-      queueMsg('DOOR CYCLING', '');
-      setTimeout(function () { if (state === 'PLAY') winGame(); }, 850);
-      return;
-    }
-  }
 
-  function powerOn() {
-    powered = true;
-    A.generatorRoar();
-    queueMsg('GENERATOR ONLINE — EXIT ENERGIZED', 'amber');
-    // global scripted noise: it knows exactly where you are (GDD §6.2)
-    EN.state.agitation = 100;
-    EN.hear(M.markers.G.x, M.markers.G.z, 200, now, true);
-    EN.forceChase();
+    // unlock nearest locked door if we have unused keys
+    var keysAvailable = keysCollected - doorsOpen;
+    for (i = 0; i < M.markers.doors.length; i++) {
+      var door = M.markers.doors[i];
+      if (!door.locked) continue;
+      if (!near(door.x, door.z, range + 0.8)) continue;
+      if (keysAvailable <= 0) {
+        queueMsg('BLAST DOOR LOCKED — NEED ACCESS KEY', 'amber');
+        return;
+      }
+      var unlocked = M.unlockDoor(door.id);
+      if (unlocked) {
+        doorsOpen = M.doorsOpenCount();
+        A.clunk(0);
+        emitNoise(NOISE_INTERACT);
+        queueMsg('BLAST DOOR OPEN ' + doorsOpen + '/3', 'amber');
+      }
+      return;
+    }
+
+    // jack-in console
+    if (near(M.markers.G.x, M.markers.G.z, range + 0.5)) {
+      if (uplinkDone) {
+        queueMsg('UPLINK ALREADY LIVE — MOVE TO LZ', 'amber');
+        return;
+      }
+      if (doorsOpen < 3) {
+        queueMsg('CONSOLE SEALED — OPEN ALL BLAST DOORS', 'red');
+        return;
+      }
+      if (CIR && CIR.isActive()) return;
+      queueMsg('JACK-IN SEQUENCE — ROUTE THE MATRIX', 'amber');
+      CIR.open(startExfil, onCircuitTimeout);
+      return;
+    }
+
+    // LZ board during on-station
+    if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
+      winGame();
+      return;
+    }
+    if (exfilPhase === 'INBOUND' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
+      queueMsg('LZ COLD — CHOPPER STILL INBOUND', '');
+      return;
+    }
+    if (exfilPhase === 'NONE' && near(M.markers.X.x, M.markers.X.z, range + 0.4)) {
+      queueMsg('LZ INACTIVE — COMPLETE UPLINK FIRST', '');
+      return;
+    }
   }
 
   function updateLasers(dt) {
@@ -615,8 +697,6 @@
   }
 
   function updateItems(dt) {
-    if (seatLockout > 0) seatLockout -= dt;
-
     // memos auto-read on walk-over
     for (var i = 0; i < memos.length; i++) {
       if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
@@ -624,47 +704,81 @@
       }
     }
 
-    // exit beacon — the only self-refreshing returns in the game (GDD §6.2)
-    if (powered) {
+    // chopper LZ beacon
+    if (exfilPhase === 'INBOUND' || exfilPhase === 'ON_STATION') {
       beaconTimer -= dt;
       if (beaconTimer <= 0) {
-        beaconTimer = 0.5;
+        beaconTimer = exfilPhase === 'ON_STATION' ? 0.12 : 0.45;
         var X = M.markers.X;
-        for (var b = 0; b < 40; b++) {
-          R.addPoint(
-            X.x + (math.rand() - 0.5) * 2.2,
-            math.rand() * 2.8,
-            X.z + (math.rand() - 0.5) * 2.2,
-            C_WHITE[0], C_WHITE[1], C_WHITE[2], now, BEACON_LIFE
-          );
+        var flash = exfilPhase === 'ON_STATION' ? (Math.sin(now * 18) > 0) : (Math.sin(now * 4) > -0.2);
+        if (flash) {
+          var n = exfilPhase === 'ON_STATION' ? 70 : 35;
+          for (var b = 0; b < n; b++) {
+            var ang = math.rand() * Math.PI * 2;
+            var rr = Math.sqrt(math.rand()) * LZ_RADIUS;
+            R.addPoint(
+              X.x + Math.cos(ang) * rr,
+              0.05 + math.rand() * 0.35,
+              X.z + Math.sin(ang) * rr,
+              C_WHITE[0], C_WHITE[1], C_WHITE[2], now, BEACON_LIFE
+            );
+          }
         }
       }
     }
 
-    // interact hints (only when the line is idle)
-    if (!curMsg) {
+    // auto-board if standing in LZ during on-station
+    if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
+      winGame();
+      return;
+    }
+
+    // interact hints
+    if (!curMsg && !(CIR && CIR.isActive())) {
       var hint = '';
       var hintRange = inVR() ? INTERACT_RANGE_VR : INTERACT_RANGE;
-      for (i = 0; i < fuses.length; i++) {
-        if (!fuses[i].taken && near(fuses[i].x, fuses[i].z, hintRange)) {
-          hint = inVR() ? '[A] RECOVER FUSE (AIM CYAN/AMBER)' : '[E] RECOVER FUSE';
+      for (i = 0; i < accessKeys.length; i++) {
+        if (!accessKeys[i].taken && near(accessKeys[i].x, accessKeys[i].z, hintRange)) {
+          hint = inVR() ? '[A] RECOVER ACCESS KEY' : '[E] RECOVER ACCESS KEY';
         }
       }
-      if (near(M.markers.G.x, M.markers.G.z, hintRange + 0.5) && fusesSeated < 3) {
-        hint = inVR() ? '[A] SEAT FUSE' : '[E] SEAT FUSE';
+      for (i = 0; i < M.markers.doors.length; i++) {
+        if (M.markers.doors[i].locked && near(M.markers.doors[i].x, M.markers.doors[i].z, hintRange + 0.8)) {
+          hint = inVR() ? '[A] UNLOCK BLAST DOOR' : '[E] UNLOCK BLAST DOOR';
+        }
       }
-      if (near(M.markers.X.x, M.markers.X.z, hintRange + 0.4)) {
-        hint = powered
-          ? (inVR() ? '[A] OPEN FREIGHT DOOR' : '[E] OPEN FREIGHT DOOR')
-          : (inVR() ? '[A] FREIGHT DOOR (DEAD)' : '[E] FREIGHT DOOR (DEAD)');
+      if (near(M.markers.G.x, M.markers.G.z, hintRange + 0.5) && !uplinkDone) {
+        hint = doorsOpen < 3
+          ? (inVR() ? '[A] CONSOLE SEALED' : '[E] CONSOLE SEALED')
+          : (inVR() ? '[A] JACK INTO CORE' : '[E] JACK INTO CORE');
+      }
+      if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS + 1)) {
+        hint = 'ENTER FLASHING LZ — BOARD NOW';
       }
       for (i = 0; i < memos.length; i++) {
         if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
-          hint = inVR() ? '[A] READ MEMO' : '';
+          hint = inVR() ? '[A] READ INTEL' : '';
         }
       }
       if (hint) { el.eventline.textContent = hint; el.eventline.className = ''; }
       else if (!msgQueue.length) el.eventline.textContent = '';
+    }
+  }
+
+  function updateExfil(dt) {
+    if (exfilPhase === 'INBOUND') {
+      exfilTimer -= dt;
+      if (exfilTimer <= 0) {
+        exfilPhase = 'ON_STATION';
+        exfilTimer = CHOPPER_LINGER_S;
+        if (A.chopperOnStation) A.chopperOnStation();
+        queueMsg('CHOPPER ON STATION — BOARD THE LZ', 'amber', 4);
+      }
+    } else if (exfilPhase === 'ON_STATION') {
+      exfilTimer -= dt;
+      if (exfilTimer <= 0) {
+        failLeftBehind();
+      }
     }
   }
 
@@ -673,6 +787,7 @@
   // ------------------------------------------------------------------
   var strideAcc = 0;
   function updatePlayer(dt, vrInput) {
+    if (CIR && CIR.isActive()) return; // locked into jack-in
     var crouch = !vrInput && (keys['ControlLeft'] || keys['ControlRight']);
     var sprint = !vrInput && (keys['ShiftLeft'] || keys['ShiftRight']) && !crouch;
     var speed = crouch ? SPEED_CROUCH : (sprint ? SPEED_SPRINT : SPEED_WALK);
@@ -746,13 +861,11 @@
 
   function updateHUD(dt) {
     runTime += dt;
-    var mm = Math.floor(runTime / 60), ss = Math.floor(runTime % 60);
+    var totalSec = Math.floor(runTime);
+    var mm = Math.floor(totalSec / 60), ss = totalSec % 60;
     el.timer.textContent = 'T+' + pad(mm, 2) + ':' + pad(ss, 2);
-
-    // camcorder wall clock — Halse went down at 05:47
-    var wall = 5 * 3600 + 47 * 60 + Math.floor(runTime);
-    var wh = Math.floor(wall / 3600), wm = Math.floor((wall % 3600) / 60), ws = wall % 60;
-    el.vcrClock.textContent = 'AM ' + wh + ':' + pad(wm, 2) + ':' + pad(ws, 2);
+    var hh = Math.floor(totalSec / 3600);
+    el.vcrClock.textContent = 'T+' + pad(hh, 2) + ':' + pad(mm % 60, 2) + ':' + pad(ss, 2);
     el.pts.textContent = 'PTS ' + pad(R.pointCount(), 6) + ' / ' + R.CAPACITY;
 
     var charge = burst.active ? 0 : (1 - Math.max(0, burst.cooldown) / BURST_COOLDOWN);
@@ -761,9 +874,19 @@
     for (var i = 0; i < 8; i++) s += i < blocks ? '\u25AE' : '\u25AF';
     el.chg.textContent = s;
 
-    el.obj.innerHTML = powered
-      ? '<span class="energized">EXIT ENERGIZED</span>'
-      : 'FUSE ' + fusesCollected + '/3' + (fusesCollected > fusesSeated ? ' (SEAT ' + fusesSeated + '/3)' : '');
+    el.obj.innerHTML = (function () {
+      if (exfilPhase === 'ON_STATION') {
+        return '<span class="energized">LZ ON STATION T-' + pad(Math.max(0, Math.ceil(exfilTimer)), 2) + '</span>';
+      }
+      if (exfilPhase === 'INBOUND') {
+        return '<span class="energized">CHOPPER INBOUND T-' + pad(Math.max(0, Math.ceil(exfilTimer)), 2) + '</span>';
+      }
+      if (uplinkDone) return '<span class="energized">UPLINK LIVE</span>';
+      if (doorsOpen < 3) {
+        return 'KEY ' + keysCollected + '/3 · DOOR ' + doorsOpen + '/3';
+      }
+      return 'KEY 3/3 · JACK-IN READY';
+    })();
 
     // AUX needle: own emission, decaying over ~1 s
     auxLoud = Math.max(0, auxLoud - dt * 1.1);
@@ -817,36 +940,46 @@
 
     if (state === 'PLAY') {
       var vrInput = xrData ? xrData.input : null;
-      updatePlayer(dt, vrInput);
 
-      if (vrInput) {
-        trickleOn = vrInput.trickle;
-        vrScanDirection = vrInput.aimDirection;
-        if (vrInput.aimOrigin) {
-          var c = Math.cos(vrInput.bodyYaw), s = Math.sin(vrInput.bodyYaw);
-          vrScanOrigin = {
-            x: player.x + c * vrInput.aimOrigin.localX - s * vrInput.aimOrigin.localZ,
-            y: vrInput.aimOrigin.y,
-            z: player.z + s * vrInput.aimOrigin.localX + c * vrInput.aimOrigin.localZ
-          };
+      if (CIR && CIR.isActive()) {
+        if (vrInput && vrInput.interactPressed) CIR.rotateSelected();
+        CIR.update(dt);
+        updateExfil(dt);
+        updateMsg(dt);
+        updateHUD(dt);
+      } else {
+        updatePlayer(dt, vrInput);
+
+        if (vrInput) {
+          trickleOn = vrInput.trickle;
+          vrScanDirection = vrInput.aimDirection;
+          if (vrInput.aimOrigin) {
+            var c = Math.cos(vrInput.bodyYaw), s = Math.sin(vrInput.bodyYaw);
+            vrScanOrigin = {
+              x: player.x + c * vrInput.aimOrigin.localX - s * vrInput.aimOrigin.localZ,
+              y: vrInput.aimOrigin.y,
+              z: player.z + s * vrInput.aimOrigin.localX + c * vrInput.aimOrigin.localZ
+            };
+          } else {
+            vrScanOrigin = null;
+          }
+          if (vrInput.burstPressed) tryBurst();
+          if (vrInput.interactPressed) interact();
         } else {
           vrScanOrigin = null;
+          vrScanDirection = null;
         }
-        if (vrInput.burstPressed) tryBurst();
-        if (vrInput.interactPressed) interact();
-      } else {
-        vrScanOrigin = null;
-        vrScanDirection = null;
-      }
 
-      updateScanner(dt);
-      updateLasers(dt);
-      updateItems(dt);
-      if (NS.mic) NS.mic.tick(dt, state === 'PLAY', function (loud) { emitNoise(loud); });
-      EN.update(dt, player, now, { onKill: onKill, onEnemyClick: onEnemyClick });
-      updateHeartbeat(dt);
-      updateMsg(dt);
-      updateHUD(dt);
+        updateScanner(dt);
+        updateLasers(dt);
+        updateItems(dt);
+        updateExfil(dt);
+        if (NS.mic) NS.mic.tick(dt, state === 'PLAY', function (loud) { emitNoise(loud); });
+        EN.update(dt, player, now, { onKill: onKill, onEnemyClick: onEnemyClick });
+        updateHeartbeat(dt);
+        updateMsg(dt);
+        updateHUD(dt);
+      }
 
       if (EN.state.agitation > 70) {
         tearTimer -= dt;
@@ -899,7 +1032,7 @@
 
   NS.game = {
     init: init,
-    fusesCollected: function () { return fusesCollected; },
+    fusesCollected: function () { return keysCollected; },
     onVRStart: function () {
       if (A.stopAllTransient) A.stopAllTransient();
       if (!runActive) startRun();

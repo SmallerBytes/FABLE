@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>HOLLOW — FABLE DYNAMICS RD-9 (1988)</title>
+<title>HOLLOW — CYBER RAID / RD-9</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root{
@@ -101,13 +101,13 @@
   <div class="hud-corner" id="hud-tl">RD-9 RANGING ACTIVE<br><span id="hud-timer">T+00:00</span></div>
   <div class="hud-corner" id="hud-tr"><span id="hud-pts">PTS 000000 / 700000</span></div>
   <div class="hud-corner" id="hud-bl">CHG <span id="hud-chg">&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;</span></div>
-  <div class="hud-corner" id="hud-br"><span id="hud-obj">FUSE 0/3</span></div>
+  <div class="hud-corner" id="hud-br"><span id="hud-obj">KEY 0/3</span></div>
   <div id="aux">AUX EMISSION<div id="aux-bar"><div id="aux-fill"></div></div><div id="aux-tick">&#9650;</div></div>
   <div id="eventline"></div>
   <div id="reticle"></div>
   <div class="vcr" id="vcr-rec"><span class="dot">&#9679;</span> REC</div>
   <div class="vcr" id="vcr-mode">SP</div>
-  <div class="vcr" id="vcr-date">OCT 22 1988<br><span id="vcr-clock">AM 5:47:00</span></div>
+  <div class="vcr" id="vcr-date">RAID CLOCK<br><span id="vcr-clock">T+00:00:00</span></div>
 </div>
 
 <div class="screen visible" id="boot-screen">
@@ -115,7 +115,7 @@
     <pre id="boot-text"></pre>
     <div id="boot-continue" style="display:none">
       <h1>HOLLOW</h1>
-      <div class="sub">FABLE DYNAMICS — APPLIED OPTICS DIVISION — BUILD 0.7.2 — OCT 1988<br>ARCHIVE RECONSTRUCTION — TAPE 7 OF 9</div>
+      <div class="sub">CYBER RAID OVERLAY — RD-9 RANGING PACKAGE<br>ENEMY C2 NODE / EMCON BLACKOUT — SOS MISSION SUPPORT</div>
       <div class="opt-row">
         <label>SENS <input type="range" id="opt-sens" min="2" max="20" value="8"></label>
         <label>VOL <input type="range" id="opt-vol" min="0" max="100" value="70"></label>
@@ -128,25 +128,26 @@
 
 <div class="screen" id="controls-screen">
   <div class="screen-inner">
-    <div class="sub">RD-9 OPERATOR CARD — REV C</div>
+    <div class="sub">RD-9 RAID OPERATOR CARD</div>
     <pre>
   MOUSE ............ AIM RANGING HEAD
   HOLD LMB ......... TRICKLE SCAN          <span class="dim">(QUIET, NARROW)</span>
-  RMB / SPACE ...... BURST SWEEP           <span class="red">(LOUD. IT WILL HEAR.)</span>
+  RMB / SPACE ...... BURST SWEEP           <span class="red">(LOUD. SECURITY HEARS.)</span>
   W A S D .......... MOVE
   SHIFT ............ SPRINT                <span class="red">(LOUD)</span>
   CTRL ............. CROUCH                <span class="dim">(NEAR-SILENT)</span>
-  E ................ INTERACT
+  E ................ INTERACT / ROTATE TILE
 
-  DIRECTIVE: RECOVER 3 FUSES <span class="amber">[AMBER RETURNS]</span>
-             SEAT FUSES AT GENERATOR. PROCEED TO EXIT.
+  DIRECTIVE: RECOVER 3 ACCESS KEYS <span class="amber">[AMBER]</span>
+             UNLOCK BLAST DOORS → JACK INTO CORE
+             AFTER UPLINK: REACH FLASHING LZ BEFORE CHOPPER DEPARTS
 
-  <span style="color:#0f0">HARBOR GREEN RETURNS</span> = SAFE ZONE (SANCTUARY)
-  <span class="amber">YELLOW RETURNS</span> = LASER ALARM (CROSSING ALERTS IT)
+  <span style="color:#0f0">HARBOR GREEN</span> = FARADAY SHELTER
+  <span class="amber">YELLOW</span> = TRIPWIRE ALARM
+  <span style="color:#fff">WHITE FLASH LZ</span> = CHOPPER PAD (ON STATION ONLY)
 
-  <span class="red">RETURN ANOMALY CLASS: RED. DO NOT APPROACH RED.</span>
-  <span class="dim">RED RETURNS ARE ALWAYS CURRENT. RED RETURNS MOVE.</span>
-  <span class="dim">MIC / VOICE RAISES NOISE. PLAN INSIDE HARBORS.</span></pre>
+  <span class="red">RED RETURNS = SECURITY. DO NOT ENGAGE.</span>
+  <span class="dim">MIC / VOICE RAISES SIGNATURE. PLAN IN HARBORS.</span></pre>
     <p style="margin-top:26px" class="blink">CLICK TO ENGAGE RANGING HEAD</p>
     <button id="enter-vr" type="button" disabled>CHECKING WEBXR...</button>
     <div id="vr-note">QUEST: LEFT STICK MOVE · RIGHT STICK SNAP TURN · TRIGGER SCAN · GRIP BURST · A / X / STICK-CLICK INTERACT</div>
@@ -187,6 +188,7 @@
 <script src="src/audio.js"></script>
 <script src="src/mic.js"></script>
 <script src="src/enemy.js"></script>
+<script src="src/circuit.js"></script>
 <script src="src/vr.js"></script>
 <script src="src/game.js"></script>
 </body>

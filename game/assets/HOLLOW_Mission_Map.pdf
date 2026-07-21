@@ -2,19 +2,19 @@
 1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj
 2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj
 3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj
-4 0 obj<< /Length 2716 >>stream
+4 0 obj<< /Length 2752 >>stream
 BT
 /F1 6 Tf
 36 780 Td
 7 TL
-(HOLLOW — SITE C SUBLEVEL 2 — MISSION MAP) Tj
-T* (SOS Mission Command Exercise) Tj
+(HOLLOW — ENEMY C2 NODE — MISSION MAP) Tj
+T* (SOS Cyber Raid Exercise) Tj
 T* () Tj
-T* (INTENT: Recover 3 fuses, restore generator, extract. Minimize signature.) Tj
-T* (Break contact to green harbors \(S\) if compromised.) Tj
+T* (INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.) Tj
+T* (Minimize emissions. Faraday harbors \(S\) dampen signature.) Tj
 T* () Tj
-T* (LEGEND: # wall  . floor  S safe harbor  P spawn  1-3 fuses  G gen  X exit  m memo  C threat) Tj
-T* (LASERS: L-STORAGE, L-LAB, L-MID, L-GEN, L-EXIT — alarm / force investigate) Tj
+T* (LEGEND: # wall  . floor  S harbor  P infil  1-3 keys  G jack-in  X LZ  m intel  C security) Tj
+T* (DOORS: D1 D2 D3 \(locked until keyed\) · TRIPWIRES: L-STORAGE, L-LAB, L-MID, L-GEN, L-EXIT) Tj
 T* () Tj
 T* (################################################) Tj
 T* (#......#..........#...........#......#.........#) Tj
@@ -54,8 +54,8 @@ T* (#......................................####....#) Tj
 T* (################################################) Tj
 T* () Tj
 T* (Operator=VR. Mission Director=this map + voice.) Tj
-T* (Speech near headset mic raises noise \(EMCON\).) Tj
-T* (For diagram: open game/map-print.html → Print → Save as PDF.) Tj
+T* (After uplink: inbound then on-station window. Miss LZ = left behind.) Tj
+T* (Diagram: open game/map-print.html → Print → Save as PDF.) Tj
 ET
 endstream
 endobj
@@ -67,8 +67,8 @@ xref
 0000000056 00000 n 
 0000000111 00000 n 
 0000000235 00000 n 
-0000003001 00000 n 
+0000003037 00000 n 
 trailer<< /Size 6 /Root 1 0 R >>
 startxref
-3067
+3103
 %%EOF

@@ -24,21 +24,19 @@
 
   function stopAllTransient() {
     if (!ctx) return;
-    // chase sting — immediate hard stop (cancel delayed teardown)
     if (stingStopTimer) { clearTimeout(stingStopTimer); stingStopTimer = null; }
     if (stingNodes) {
       stingNodes.forEach(stopNode);
       stingNodes = null;
     }
-    // death / alarm / scare one-shots
     transientNodes.forEach(stopNode);
     transientNodes = [];
-    // capacitor whine
     if (whineOsc) {
       stopNode(whineOsc);
       whineOsc = null;
       whineGain = null;
     }
+    chopperStop();
     if (breathGain) breathGain.gain.value = 0;
   }
 
@@ -359,6 +357,49 @@
     }
   }
 
+  var chopperGain = null, chopperNodes = [];
+  function chopperStop() {
+    chopperNodes.forEach(stopNode);
+    chopperNodes = [];
+    chopperGain = null;
+  }
+
+  function uplinkSurge() {
+    generatorRoar();
+    blipAt(880, 0.3, 0.05, 0, 'sine');
+    blipAt(1320, 0.4, 0.04, 0, 'sine');
+  }
+
+  function chopperInbound() {
+    if (!ctx) return;
+    chopperStop();
+    var t = ctx.currentTime;
+    chopperGain = track(ctx.createGain());
+    chopperGain.gain.setValueAtTime(0.0, t);
+    chopperGain.gain.linearRampToValueAtTime(0.04, t + 2.0);
+    chopperGain.connect(master);
+    var n = track(noiseSource());
+    var f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 90; f.Q.value = 0.8;
+    n.connect(f); f.connect(chopperGain);
+    n.start(t);
+    chopperNodes.push(n, chopperGain);
+    blipAt(600, 0.15, 0.03, 0, 'square');
+  }
+
+  function chopperOnStation() {
+    if (!ctx) return;
+    var t = ctx.currentTime;
+    if (chopperGain) {
+      chopperGain.gain.cancelScheduledValues(t);
+      chopperGain.gain.setValueAtTime(0.06, t);
+      chopperGain.gain.linearRampToValueAtTime(0.11, t + 0.8);
+    } else {
+      chopperInbound();
+    }
+    for (var i = 0; i < 3; i++) blipAt(1200 + i * 200, 0.08, 0.04, 0, 'square', t + i * 0.12);
+  }
+
   function fuseChime() {                         // major 6th dyad, amber-tinted
     blipAt(880, 0.5, 0.04, 0, 'sine');
     blipAt(1480, 0.6, 0.03, 0, 'sine');
@@ -414,7 +455,9 @@
     footstep: footstep, enemyStep: enemyStep, click: click, heartbeat: heartbeat,
     sting: sting, scareImpact: scareImpact, death: death, fuseChime: fuseChime, clunk: clunk,
     generatorRoar: generatorRoar, doorGrind: doorGrind, teletype: teletype,
-    securityAlarm: securityAlarm, stopAllTransient: stopAllTransient
+    securityAlarm: securityAlarm, stopAllTransient: stopAllTransient,
+    uplinkSurge: uplinkSurge, chopperInbound: chopperInbound,
+    chopperOnStation: chopperOnStation, chopperStop: chopperStop
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));

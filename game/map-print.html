@@ -31,8 +31,8 @@
 </style>
 </head>
 <body>
-  <h1>HOLLOW — SITE C SUBLEVEL 2 — MISSION MAP</h1>
-  <div class="sub">SOS MISSION COMMAND EXERCISE · FABLE DYNAMICS RD-9 ARCHIVE · PRINT OR SAVE AS PDF</div>
+  <h1>HOLLOW — ENEMY C2 NODE — MISSION MAP</h1>
+  <div class="sub">SOS CYBER RAID EXERCISE · PRINT OR SAVE AS PDF</div>
   <div class="actions">
     <button type="button" onclick="window.print()">PRINT / SAVE AS PDF</button>
     <a href="index.html">BACK TO GAME</a>
@@ -41,30 +41,29 @@
     <canvas id="map" width="720" height="540"></canvas>
     <div class="panel">
       <h2>COMMANDER'S INTENT</h2>
-      Recover three fuses, restore generator power, extract via freight exit.
-      Minimize detectable activity. If compromised, break contact to green
-      harbors and reorient. Success = extraction with mission assets.
+      Recover 3 access keys, unlock blast doors, jack into the core,
+      then extract via LZ while the chopper is on station. Minimize emissions.
+      If compromised, break to Faraday harbors and reorient.
 
       <h2>ROLES</h2>
-      <b>OPERATOR (VR):</b> First-person LiDAR only. Executes movement, scan, pickup.<br>
-      <b>MISSION DIRECTOR (MAP):</b> This sheet + voice. Routes Operator. Does not see live threat.
+      <b>OPERATOR (VR):</b> LiDAR only. Keys, doors, jack-in, LZ board.<br>
+      <b>MISSION DIRECTOR (MAP):</b> This sheet + voice. Routes Operator.
 
       <h2>LEGEND</h2>
       <span class="swatch" style="background:#111"></span> Wall<br>
       <span class="swatch" style="background:#cfc"></span> Floor<br>
-      <span class="swatch" style="background:#0c0"></span> Safe harbor (green LiDAR) — sanctuary<br>
-      <span class="swatch" style="background:#fc0"></span> Laser alarm — crossing forces investigation<br>
-      <b>P</b> Spawn · <b>1–3</b> Fuses · <b>G</b> Generator · <b>X</b> Exit · <b>m</b> Memo · <b>C</b> Threat origin
+      <span class="swatch" style="background:#0c0"></span> Faraday harbor<br>
+      <span class="swatch" style="background:#fc0"></span> Tripwire alarm<br>
+      <span class="swatch" style="background:#e67e00"></span> Blast door<br>
+      <b>P</b> Infil · <b>1–3</b> Keys · <b>G</b> Jack-in · <b>X</b> LZ · <b>m</b> Intel · <b>C</b> Security · <b>D</b> Door
 
-      <h2>COMMS CHECKLIST</h2>
-      1. MD states intent (one sentence).<br>
-      2. Operator backbriefs route.<br>
-      3. Check-ins at each fuse.<br>
-      4. Initiative under compromise allowed; report when clear.<br>
-      5. Voice near headset mic raises signature (EMCON).
+      <h2>EXFIL</h2>
+      After uplink: inbound timer, then on-station window.
+      Miss the flashing LZ = left behind.
 
-      <h2>RETURN COLORS (OPERATOR)</h2>
-      Green harbor = safe · Yellow = laser · Amber = fuse/gen · Cyan = memo · Red = threat
+      <h2>COMMS</h2>
+      Intent → backbrief → check-ins at keys/doors → report uplink → call LZ status.
+      Voice near mic raises signature (EMCON).
     </div>
   </div>
 <script src="src/math.js"></script>
@@ -112,6 +111,11 @@
   label(M.markers.C, 'C', '#900');
   M.markers.fuses.forEach(function (f, i) { label(f, String(i + 1), '#840'); });
   M.markers.memos.forEach(function (m) { label(m, 'm', '#066'); });
+  M.markers.doors.forEach(function (d) {
+    ctx.fillStyle = '#e67e00';
+    ctx.fillRect((d.c) * cellW + 1, (d.r) * cellH + 1, cellW - 2, cellH - 2);
+    label(d, 'D', '#000');
+  });
 })();
 </script>
 </body>

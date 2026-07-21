@@ -14,20 +14,20 @@ var rows = M.asciiRows().map(function (line, r) {
 });
 
 var body = [
-  'HOLLOW — SITE C SUBLEVEL 2 — MISSION MAP',
-  'SOS Mission Command Exercise',
+  'HOLLOW — ENEMY C2 NODE — MISSION MAP',
+  'SOS Cyber Raid Exercise',
   '',
-  'INTENT: Recover 3 fuses, restore generator, extract. Minimize signature.',
-  'Break contact to green harbors (S) if compromised.',
+  'INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.',
+  'Minimize emissions. Faraday harbors (S) dampen signature.',
   '',
-  'LEGEND: # wall  . floor  S safe harbor  P spawn  1-3 fuses  G gen  X exit  m memo  C threat',
-  'LASERS: ' + M.markers.lasers.map(function (l) { return l.id; }).join(', ') + ' — alarm / force investigate',
+  'LEGEND: # wall  . floor  S harbor  P infil  1-3 keys  G jack-in  X LZ  m intel  C security',
+  'DOORS: D1 D2 D3 (locked until keyed) · TRIPWIRES: ' + M.markers.lasers.map(function (l) { return l.id; }).join(', '),
   ''
 ].concat(rows).concat([
   '',
   'Operator=VR. Mission Director=this map + voice.',
-  'Speech near headset mic raises noise (EMCON).',
-  'For diagram: open game/map-print.html → Print → Save as PDF.'
+  'After uplink: inbound then on-station window. Miss LZ = left behind.',
+  'Diagram: open game/map-print.html → Print → Save as PDF.'
 ]);
 
 function pdfEscape(s) {
