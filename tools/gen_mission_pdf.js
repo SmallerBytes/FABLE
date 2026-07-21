@@ -13,25 +13,49 @@ var rows = M.asciiRows().map(function (line, r) {
   return out;
 });
 
+// Overlay blast doors + tripwire midpoints so the PDF matches the printable diagram
+function putChar(c, r, ch) {
+  if (r < 0 || r >= rows.length || c < 0 || c >= rows[r].length) return;
+  var line = rows[r];
+  rows[r] = line.slice(0, c) + ch + line.slice(c + 1);
+}
+M.markers.doors.forEach(function (d) {
+  putChar(d.c, d.r, 'D');
+});
+M.markers.lasers.forEach(function (L) {
+  var c = Math.floor(((L.x0 + L.x1) * 0.5) / M.CELL);
+  var r = Math.floor(((L.z0 + L.z1) * 0.5) / M.CELL);
+  putChar(c, r, 'T');
+});
+
 var P = M.markers.P;
 var pCol = Math.floor(P.x / M.CELL), pRow = Math.floor(P.z / M.CELL);
+var doorLine = M.markers.doors.map(function (d) {
+  return d.id + '@' + d.c + ',' + d.r;
+}).join('  ');
+var tripLine = M.markers.lasers.map(function (L) {
+  var c = Math.floor(((L.x0 + L.x1) * 0.5) / M.CELL);
+  var r = Math.floor(((L.z0 + L.z1) * 0.5) / M.CELL);
+  return L.id + '@' + c + ',' + r;
+}).join('  ');
 
 var body = [
   'HOLLOW — ENEMY C2 NODE — MISSION MAP',
   'SOS Cyber Raid Exercise',
   '',
-  'START / INFIL: grid col ' + pCol + ', row ' + pRow + '  (ASCII character P on the plot below)',
+  'START / INFIL: grid col ' + pCol + ', row ' + pRow + '  (ASCII character P)',
+  'BLAST DOORS: ' + doorLine,
+  'TRIPWIRES (T): ' + tripLine,
   'INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.',
   'Minimize emissions. Faraday harbors (S) dampen signature.',
   '',
-  'LEGEND: # wall  . floor  S harbor  P START/infil  1-3 keys  G jack-in  X LZ  m intel  C security',
-  'DOORS: D1 D2 D3 (locked until keyed) · TRIPWIRES: ' + M.markers.lasers.map(function (l) { return l.id; }).join(', '),
+  'LEGEND: # wall  . floor  S harbor  P START  D blast door  T tripwire  1-3 keys  G jack-in  X LZ  m intel  C security',
   ''
 ].concat(rows).concat([
   '',
   'Operator=VR. Mission Director=this map + voice.',
   'After uplink: inbound then on-station window. Miss LZ = left behind.',
-  'Diagram: open game/map-print.html → Print → Save as PDF (START shown as green P).'
+  'Full-color diagram: open game/map-print.html → Print → Save as PDF.'
 ]);
 
 function pdfEscape(s) {
