@@ -128,11 +128,11 @@
       { x0: 5.5 * CELL, z0: 34 * CELL + IN, x1: 5.5 * CELL, z1: 35 * CELL - IN, y0: TY - TH, y1: TY + TH, id: 'L-EXIT' }
     ];
 
-    // Blast doors — start locked (extra solid cells on approaches to jack-in)
+    // Blast doors — start locked (must sit in real wall gaps / chokes)
     markers.doors = [
-      { id: 'D1', c: 16, r: 13, locked: true },  // mid-map west approach
-      { id: 'D2', c: 26, r: 27, locked: true },  // south corridor toward console
-      { id: 'D3', c: 34, r: 23, locked: true }   // jack-in antechamber
+      { id: 'D1', c: 17, r: 10, locked: true },  // gap in mid horizontal wall (north approach)
+      { id: 'D2', c: 26, r: 27, locked: true },  // south corridor choke toward console
+      { id: 'D3', c: 34, r: 23, locked: true }   // jack-in antechamber doorway
     ];
     doorSolid = {};
     markers.doors.forEach(function (d) {
