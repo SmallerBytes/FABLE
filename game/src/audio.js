@@ -4,7 +4,7 @@
 
   var ctx = null, master = null, noiseBuf = null;
   var drone = null, droneGain = null;
-  var breathGain = null, breathPan = null;
+  var breathGain = null, breathPan = null, breathSrc = null;
   var whineOsc = null, whineGain = null;
   var stingNodes = null;
   var stingStopTimer = null;
@@ -37,7 +37,9 @@
       whineGain = null;
     }
     chopperStop();
-    if (breathGain) breathGain.gain.value = 0;
+    if (breathSrc) { stopNode(breathSrc); breathSrc = null; }
+    if (breathGain) { try { breathGain.disconnect(); } catch (e3) { void e3; } breathGain = null; }
+    breathPan = null;
   }
 
   function ensure() {
@@ -81,35 +83,42 @@
   }
 
   // ---- continuous layers -------------------------------------------------
-  // No constant engine/room drone — silence by default; proximity breath only.
+  // No looping bed on start. Proximity breath is created only when needed.
   function startAmbient() {
-    if (!ensure() || drone) return;
-    drone = {}; // mark ambient started (breath layer only)
+    if (!ensure()) return;
+    drone = {}; // mark audio session live
     droneGain = null;
+  }
 
-    // custodian breathing layer (gain driven per-frame; silent until near)
-    var bn = noiseSource();
+  function ensureBreath() {
+    if (breathGain || !ctx) return;
+    breathSrc = noiseSource();
     var lp = ctx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 420;
-    var lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.45;
-    var lfoG = ctx.createGain(); lfoG.gain.value = 0.5;
-    breathGain = ctx.createGain(); breathGain.gain.value = 0.0;
+    breathGain = ctx.createGain();
+    breathGain.gain.value = 0;
     breathPan = panner(0);
-    lfo.connect(lfoG);
-    lfoG.connect(breathGain.gain);
-    bn.connect(lp); lp.connect(breathGain); breathGain.connect(breathPan); breathPan.connect(master);
-    bn.start(); lfo.start();
+    breathSrc.connect(lp);
+    lp.connect(breathGain);
+    breathGain.connect(breathPan);
+    breathPan.connect(master);
+    breathSrc.start();
   }
 
   function setAgitation(a) {
-    // formerly pumped the room drone with agitation — drone removed
     void a;
   }
 
   function setBreath(gain, pan) {      // proximity breathing, <14 m
+    var g = Math.min(0.20, Math.max(0, gain || 0));
+    if (g <= 0.001) {
+      if (breathGain) breathGain.gain.value = 0;
+      return;
+    }
+    ensureBreath();
     if (!breathGain) return;
-    breathGain.gain.value = Math.min(0.20, gain);
-    if (breathPan.pan) breathPan.pan.value = Math.max(-1, Math.min(1, pan));
+    breathGain.gain.value = g;
+    if (breathPan && breathPan.pan) breathPan.pan.value = Math.max(-1, Math.min(1, pan || 0));
   }
 
   // ---- one-shots ---------------------------------------------------------
