@@ -69,17 +69,32 @@
 
   // Perceived loudness model (GDD §3.4 / §5.1)
   function hear(x, z, loud, now, isPlayerNoise) {
+    // Player noise from inside a safe harbor is heavily attenuated (EMCON)
+    if (isPlayerNoise && M.isSafeAt(x, z)) {
+      loud *= 0.15;
+    }
     var dx = x - E.x, dz = z - E.z;
     var dist = Math.sqrt(dx * dx + dz * dz);
     var walls = M.wallsBetween(E.x, E.z, x, z);
     var effective = loud * Math.pow(WALL_ATTEN, walls) - dist;
     if (effective <= 0) return;
-    var conf = Math.min(1, effective / loud + 0.15);
+    var conf = Math.min(1, effective / Math.max(loud, 0.01) + 0.15);
     E.agitation = Math.min(100, E.agitation + effective * 0.9);
 
     if (E.state === 'DORMANT') return; // wakes via agitation threshold only
 
     if (isPlayerNoise) lastNoiseFed = now;
+
+    // Inside sanctuary: never escalate to CHASE from hearing alone
+    if (isPlayerNoise && M.isSafeAt(x, z)) {
+      if (E.state !== 'CHASE') {
+        E.state = 'INVESTIGATE';
+        investigateTarget = { x: x, z: z };
+        dwellTimer = 0;
+        setPathTo(x, z);
+      }
+      return;
+    }
 
     if (conf >= CHASE_CONF && !mustInvestigateAfterChase && E.state !== 'CHASE') {
       enterChase();
@@ -91,6 +106,26 @@
     } else {
       // already chasing: refresh last known contact
       lastKnownX = x; lastKnownZ = z;
+    }
+  }
+
+  function forceInvestigate(x, z) {
+    if (E.state === 'DORMANT') {
+      E.state = 'PATROL';
+    }
+    E.agitation = Math.min(100, E.agitation + 35);
+    lastKnownX = x; lastKnownZ = z;
+    lastNoiseFed = (typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000);
+    mustInvestigateAfterChase = false;
+    if (E.agitation >= 55) {
+      enterChase();
+      setPathTo(x, z);
+    } else {
+      if (E.state === 'CHASE') NS.audio.sting(false);
+      E.state = 'INVESTIGATE';
+      investigateTarget = { x: x, z: z };
+      dwellTimer = 0;
+      setPathTo(x, z);
     }
   }
 
@@ -185,9 +220,10 @@
     animT += dt;
 
     var dist = distToPlayer(p);
+    var playerSafe = M.isSafeAt(p.x, p.z);
 
-    // touch-range certainty (anti-camping, GDD §5.1) — overrides must-investigate
-    if (dist < TOUCH_RANGE && E.state !== 'DORMANT') {
+    // touch-range certainty (anti-camping) — suppressed while player is in harbor
+    if (dist < TOUCH_RANGE && E.state !== 'DORMANT' && !playerSafe) {
       lastNoiseFed = now;
       lastKnownX = p.x; lastKnownZ = p.z;
       if (E.state !== 'CHASE') {
@@ -196,10 +232,15 @@
       }
     }
 
-    // kill check
-    if (dist < KILL_RANGE && E.state !== 'DORMANT') {
+    // kill check — safe zones block kill (sanctuary)
+    if (dist < KILL_RANGE && E.state !== 'DORMANT' && !playerSafe) {
       game.onKill();
       return;
+    }
+
+    // If chasing into a harbor, break off at the edge
+    if (E.state === 'CHASE' && playerSafe) {
+      leaveChase({ x: p.x, z: p.z });
     }
 
     var speed = 0, arrived;
@@ -397,7 +438,8 @@
     state: E,
     reset: reset, update: update, hear: hear, spheres: spheres,
     addAgitationFloor: addAgitationFloor,
-    forceChase: enterChase
+    forceChase: enterChase,
+    forceInvestigate: forceInvestigate
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));

@@ -25,16 +25,27 @@ No build step, no dependencies, no network. Either:
 Headphones strongly recommended. Sound is not decoration here — it is the
 primary threat-detection system.
 
+## SOS Mission Command (two-person)
+
+HOLLOW supports a Squadron Officer School-style exercise: one **Operator** in
+VR, one **Mission Director** with a printed/PDF map directing by voice.
+
+- Exercise guide: [`docs/SOS_Exercise.md`](docs/SOS_Exercise.md)
+- Mission map PDF: [`game/assets/HOLLOW_Mission_Map.pdf`](game/assets/HOLLOW_Mission_Map.pdf)
+- Printable diagram: [`game/map-print.html`](game/map-print.html) (Print → Save as PDF)
+- Live game: https://smallerbytes.github.io/FABLE/game/
+
+**Safe harbors** paint bright green on LiDAR and block Custodian kill/chase.
+**Yellow lasers** trigger a security alarm and force investigation.
+**Headset microphone** speech contributes to the noise model (EMCON).
+
 ## Quest 2 / WebXR
 
-The game now includes an initial standalone Quest WebXR path. It must be
-opened from an **HTTPS URL**; opening `index.html` directly or visiting a
-computer's plain HTTP LAN address will not allow the headset to start WebXR.
+Open **https://smallerbytes.github.io/FABLE/game/** in Quest Browser (HTTPS required).
 
-1. Publish this repository to any static HTTPS host (GitHub Pages is enough).
-2. In the Quest Browser, open `https://your-host.example/game/`.
-3. Continue past the boot screen and choose **ENTER VR (QUEST)**.
-4. Approve the headset's immersive-VR prompt.
+1. Continue past the boot screen and choose **ENTER VR (QUEST)**.
+2. Approve immersive VR and microphone permissions.
+3. Allow a teammate to download the Mission Map before you enter VR.
 
 Quest controls:
 
@@ -45,7 +56,7 @@ Quest controls:
 | Right stick left/right | 30-degree snap turn |
 | Right trigger | Trickle scan aimed by the controller |
 | Right grip | Burst sweep |
-| A button | Interact |
+| A / X / stick-click | Interact |
 
 The headset path renders native stereo views and intentionally bypasses the
 desktop CRT barrel-distortion pass. It uses 80% headset framebuffer scale and
@@ -54,8 +65,7 @@ The desktop controls and presentation remain unchanged.
 
 Current VR prototype limitation: the HTML HUD is visible only in the desktop
 mirror, not in the headset. Objective status still works through colors,
-interaction sounds, and world state; a world-space wrist display is the next
-VR UI milestone.
+interaction sounds, and world state.
 
 ## Controls
 
@@ -69,22 +79,27 @@ VR UI milestone.
 | Ctrl | Crouch (near-silent) |
 | E | Interact |
 
-Return colors: green = surfaces · amber = objectives · cyan = documents ·
-white = energized exit · **red = it. Red returns are always current. Red
-returns move.**
+Return colors: phosphor green = surfaces · **harbor green = safe zone** ·
+**yellow = laser alarm** · amber = objectives · cyan = documents ·
+white = energized exit · **red = it**.
 
 ## Repository
 
 | Path | Contents |
 |---|---|
-| `docs/GDD.md` | Complete game design document (mechanics, AI, level, art, sound, narrative, tech plan) |
-| `game/` | The playable reconstruction — vanilla WebGL + WebAudio, zero dependencies |
-| `tools/validate_map.js` | Map integrity check (row lengths, marker reachability, A*) |
+| `docs/GDD.md` | Complete game design document |
+| `docs/SOS_Exercise.md` | Mission command exercise guide |
+| `game/` | Playable WebGL / WebXR build |
+| `game/assets/HOLLOW_Mission_Map.pdf` | Downloadable MD map |
+| `game/map-print.html` | Printable color map |
+| `tools/validate_map.js` | Map integrity check |
 | `tools/smoke.js` | Headless AI/raycast smoke test |
+| `tools/gen_mission_pdf.js` | Regenerate mission PDF from map data |
 
 ```
 node tools/validate_map.js
 node tools/smoke.js
+node tools/gen_mission_pdf.js
 ```
 
 ## Design pillars (short form)

@@ -141,11 +141,26 @@
   DIRECTIVE: RECOVER 3 FUSES <span class="amber">[AMBER RETURNS]</span>
              SEAT FUSES AT GENERATOR. PROCEED TO EXIT.
 
+  <span style="color:#0f0">HARBOR GREEN RETURNS</span> = SAFE ZONE (SANCTUARY)
+  <span class="amber">YELLOW RETURNS</span> = LASER ALARM (CROSSING ALERTS IT)
+
   <span class="red">RETURN ANOMALY CLASS: RED. DO NOT APPROACH RED.</span>
-  <span class="dim">RED RETURNS ARE ALWAYS CURRENT. RED RETURNS MOVE.</span></pre>
+  <span class="dim">RED RETURNS ARE ALWAYS CURRENT. RED RETURNS MOVE.</span>
+  <span class="dim">MIC / VOICE RAISES NOISE. PLAN INSIDE HARBORS.</span></pre>
     <p style="margin-top:26px" class="blink">CLICK TO ENGAGE RANGING HEAD</p>
     <button id="enter-vr" type="button" disabled>CHECKING WEBXR...</button>
     <div id="vr-note">QUEST: LEFT STICK MOVE · RIGHT STICK SNAP TURN · TRIGGER SCAN · GRIP BURST · A / X / STICK-CLICK INTERACT</div>
+    <p style="margin-top:18px">
+      <a id="btn-mission-map" href="assets/HOLLOW_Mission_Map.pdf" download
+         style="color:#7cff9b;border:1px solid #7cff9b;padding:8px 14px;text-decoration:none;display:inline-block;pointer-events:auto;margin:4px">
+        DOWNLOAD MISSION MAP (PDF)
+      </a>
+      <a href="map-print.html" target="_blank" rel="noopener"
+         style="color:#7cff9b;border:1px solid #3f8a55;padding:8px 14px;text-decoration:none;display:inline-block;pointer-events:auto;margin:4px">
+        OPEN PRINTABLE MAP
+      </a>
+    </p>
+    <div class="dim" style="margin-top:8px;font-size:10px">MISSION DIRECTOR: PRINT THE MAP · VOICE-DIRECT THE OPERATOR · MIC SPEECH RAISES SIGNATURE</div>
   </div>
 </div>
 
@@ -170,6 +185,7 @@
 <script src="src/map.js"></script>
 <script src="src/render.js"></script>
 <script src="src/audio.js"></script>
+<script src="src/mic.js"></script>
 <script src="src/enemy.js"></script>
 <script src="src/vr.js"></script>
 <script src="src/game.js"></script>

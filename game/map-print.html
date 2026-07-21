@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HOLLOW — Mission Map (SOS)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @page { size: landscape; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    font-family: Consolas, "Lucida Console", monospace;
+    background: #fff; color: #111;
+  }
+  h1 { font-size: 18px; letter-spacing: .2em; margin: 0 0 4px; }
+  .sub { font-size: 11px; color: #444; margin-bottom: 12px; }
+  .grid-wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  canvas { border: 1px solid #222; image-rendering: pixelated; }
+  .panel { max-width: 340px; font-size: 11px; line-height: 1.55; }
+  .panel h2 { font-size: 12px; letter-spacing: .12em; margin: 10px 0 4px; }
+  .swatch { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 4px; border: 1px solid #333; }
+  .actions { margin: 12px 0; }
+  .actions button, .actions a {
+    font: inherit; font-size: 12px; padding: 8px 12px; margin-right: 8px;
+    border: 1px solid #111; background: #f4f4f4; color: #111; cursor: pointer; text-decoration: none;
+  }
+  @media print {
+    .actions { display: none; }
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+  <h1>HOLLOW — SITE C SUBLEVEL 2 — MISSION MAP</h1>
+  <div class="sub">SOS MISSION COMMAND EXERCISE · FABLE DYNAMICS RD-9 ARCHIVE · PRINT OR SAVE AS PDF</div>
+  <div class="actions">
+    <button type="button" onclick="window.print()">PRINT / SAVE AS PDF</button>
+    <a href="index.html">BACK TO GAME</a>
+  </div>
+  <div class="grid-wrap">
+    <canvas id="map" width="720" height="540"></canvas>
+    <div class="panel">
+      <h2>COMMANDER'S INTENT</h2>
+      Recover three fuses, restore generator power, extract via freight exit.
+      Minimize detectable activity. If compromised, break contact to green
+      harbors and reorient. Success = extraction with mission assets.
+
+      <h2>ROLES</h2>
+      <b>OPERATOR (VR):</b> First-person LiDAR only. Executes movement, scan, pickup.<br>
+      <b>MISSION DIRECTOR (MAP):</b> This sheet + voice. Routes Operator. Does not see live threat.
+
+      <h2>LEGEND</h2>
+      <span class="swatch" style="background:#111"></span> Wall<br>
+      <span class="swatch" style="background:#cfc"></span> Floor<br>
+      <span class="swatch" style="background:#0c0"></span> Safe harbor (green LiDAR) — sanctuary<br>
+      <span class="swatch" style="background:#fc0"></span> Laser alarm — crossing forces investigation<br>
+      <b>P</b> Spawn · <b>1–3</b> Fuses · <b>G</b> Generator · <b>X</b> Exit · <b>m</b> Memo · <b>C</b> Threat origin
+
+      <h2>COMMS CHECKLIST</h2>
+      1. MD states intent (one sentence).<br>
+      2. Operator backbriefs route.<br>
+      3. Check-ins at each fuse.<br>
+      4. Initiative under compromise allowed; report when clear.<br>
+      5. Voice near headset mic raises signature (EMCON).
+
+      <h2>RETURN COLORS (OPERATOR)</h2>
+      Green harbor = safe · Yellow = laser · Amber = fuse/gen · Cyan = memo · Red = threat
+    </div>
+  </div>
+<script src="src/math.js"></script>
+<script src="src/map.js"></script>
+<script>
+(function () {
+  var M = window.HOLLOW.map;
+  var canvas = document.getElementById('map');
+  var ctx = canvas.getContext('2d');
+  var ROWS = M.ROWS(), COLS = M.COLS();
+  var cellW = canvas.width / COLS, cellH = canvas.height / ROWS;
+
+  for (var r = 0; r < ROWS; r++) {
+    for (var c = 0; c < COLS; c++) {
+      var solid = M.isSolidCell(c, r);
+      var harbor = M.isSafeCell(c, r);
+      ctx.fillStyle = solid ? '#1a1a1a' : (harbor ? '#66ee88' : '#e8f5e9');
+      ctx.fillRect(c * cellW, r * cellH, cellW + 0.5, cellH + 0.5);
+    }
+  }
+
+  // lasers
+  ctx.strokeStyle = '#e6b800';
+  ctx.lineWidth = Math.max(2, cellW * 0.35);
+  M.markers.lasers.forEach(function (L) {
+    ctx.beginPath();
+    ctx.moveTo(L.x0 / M.CELL * cellW, L.z0 / M.CELL * cellH);
+    ctx.lineTo(L.x1 / M.CELL * cellW, L.z1 / M.CELL * cellH);
+    ctx.stroke();
+  });
+
+  function label(p, text, color) {
+    if (!p) return;
+    var x = (p.x / M.CELL) * cellW, y = (p.z / M.CELL) * cellH;
+    ctx.fillStyle = color || '#000';
+    ctx.font = 'bold ' + Math.floor(cellW * 0.85) + 'px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
+  }
+
+  label(M.markers.P, 'P', '#063');
+  label(M.markers.G, 'G', '#840');
+  label(M.markers.X, 'X', '#000');
+  label(M.markers.C, 'C', '#900');
+  M.markers.fuses.forEach(function (f, i) { label(f, String(i + 1), '#840'); });
+  M.markers.memos.forEach(function (m) { label(m, 'm', '#066'); });
+})();
+</script>
+</body>
+</html>

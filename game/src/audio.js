@@ -7,7 +7,40 @@
   var breathGain = null, breathPan = null;
   var whineOsc = null, whineGain = null;
   var stingNodes = null;
+  var stingStopTimer = null;
+  var transientNodes = [];   // one-shots that must be hard-stopped on restart
   var volume = 0.7;
+
+  function track(node) {
+    if (node) transientNodes.push(node);
+    return node;
+  }
+
+  function stopNode(n) {
+    if (!n) return;
+    try { if (n.stop) n.stop(0); } catch (e) { void e; }
+    try { if (n.disconnect) n.disconnect(); } catch (e2) { void e2; }
+  }
+
+  function stopAllTransient() {
+    if (!ctx) return;
+    // chase sting — immediate hard stop (cancel delayed teardown)
+    if (stingStopTimer) { clearTimeout(stingStopTimer); stingStopTimer = null; }
+    if (stingNodes) {
+      stingNodes.forEach(stopNode);
+      stingNodes = null;
+    }
+    // death / alarm / scare one-shots
+    transientNodes.forEach(stopNode);
+    transientNodes = [];
+    // capacitor whine
+    if (whineOsc) {
+      stopNode(whineOsc);
+      whineOsc = null;
+      whineGain = null;
+    }
+    if (breathGain) breathGain.gain.value = 0;
+  }
 
   function ensure() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return true; }
@@ -25,6 +58,8 @@
     for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     return true;
   }
+
+  function getContext() { ensure(); return ctx; }
 
   function setVolume(v) {
     volume = v;
@@ -211,6 +246,7 @@
   function sting(on) {                           // chase enter/exit
     if (!ctx) return;
     if (on && !stingNodes) {
+      if (stingStopTimer) { clearTimeout(stingStopTimer); stingStopTimer = null; }
       stingNodes = [];
       var g = ctx.createGain();
       g.gain.setValueAtTime(0, ctx.currentTime);
@@ -225,12 +261,15 @@
       stingNodes.push(g);
     } else if (!on && stingNodes) {
       var gg = stingNodes[stingNodes.length - 1];
-      gg.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.8);
+      var t = ctx.currentTime;
+      try { gg.gain.cancelScheduledValues(t); gg.gain.setValueAtTime(gg.gain.value, t); gg.gain.linearRampToValueAtTime(0.0001, t + 0.35); } catch (e) { void e; }
       var nodes = stingNodes;
       stingNodes = null;
-      setTimeout(function () {
-        nodes.forEach(function (n) { if (n.stop) try { n.stop(); } catch (e) { void e; } });
-      }, 900);
+      if (stingStopTimer) clearTimeout(stingStopTimer);
+      stingStopTimer = setTimeout(function () {
+        stingStopTimer = null;
+        nodes.forEach(stopNode);
+      }, 400);
     }
   }
 
@@ -246,7 +285,7 @@
 
     // impact thump + body-hit noise burst
     thump(38, 0.22, 0.55, 0, 90);
-    var hit = noiseSource();
+    var hit = track(noiseSource());
     var hf = ctx.createBiquadFilter();
     hf.type = 'highpass'; hf.frequency.value = 800;
     var hg = ctx.createGain();
@@ -256,7 +295,7 @@
     hit.start(t); hit.stop(t + 0.2);
 
     // inhuman screech — descending saw through a resonant band
-    var sc = ctx.createOscillator();
+    var sc = track(ctx.createOscillator());
     sc.type = 'sawtooth';
     sc.frequency.setValueAtTime(1400, t);
     sc.frequency.exponentialRampToValueAtTime(180, t + 0.55);
@@ -273,19 +312,51 @@
 
   function death() {
     if (!ctx) return;
+    sting(false);
     var t = ctx.currentTime;
-    // carrier tearing out — follows the visual impact
-    var s = noiseSource();
+    // carrier tearing — ~4 s hard cap, then silence
+    var s = track(noiseSource());
     var f = ctx.createBiquadFilter();
     f.type = 'bandpass'; f.Q.value = 1.4;
     f.frequency.setValueAtTime(2600, t);
-    f.frequency.exponentialRampToValueAtTime(120, t + 1.1);
-    var g = ctx.createGain();
+    f.frequency.exponentialRampToValueAtTime(90, t + 3.2);
+    var g = track(ctx.createGain());
     g.gain.setValueAtTime(0.30, t);
-    g.gain.exponentialRampToValueAtTime(0.0005, t + 1.2);
+    g.gain.exponentialRampToValueAtTime(0.08, t + 1.0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 3.8);
     s.connect(f); f.connect(g); g.connect(master);
-    s.start(t); s.stop(t + 1.3);
-    blipAt(220, 1.6, 0.05, 0, 'sine', t + 0.9);  // carrier-loss tone
+    s.start(t);
+    try { s.stop(t + 4.0); } catch (e) { void e; }
+
+    var tone = track(ctx.createOscillator());
+    tone.type = 'sine';
+    tone.frequency.setValueAtTime(220, t + 0.6);
+    tone.frequency.exponentialRampToValueAtTime(55, t + 3.5);
+    var tg = track(ctx.createGain());
+    tg.gain.setValueAtTime(0, t);
+    tg.gain.linearRampToValueAtTime(0.06, t + 0.9);
+    tg.gain.exponentialRampToValueAtTime(0.0005, t + 3.8);
+    tone.connect(tg); tg.connect(master);
+    tone.start(t + 0.6);
+    try { tone.stop(t + 4.0); } catch (e2) { void e2; }
+  }
+
+  function securityAlarm() {
+    if (!ctx) return;
+    var t = ctx.currentTime;
+    for (var i = 0; i < 8; i++) {
+      var o = track(ctx.createOscillator());
+      o.type = 'square';
+      o.frequency.value = i % 2 ? 1800 : 1400;
+      var g = track(ctx.createGain());
+      var start = t + i * 0.22;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(0.07, start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0005, start + 0.18);
+      o.connect(g); g.connect(master);
+      o.start(start);
+      try { o.stop(start + 0.22); } catch (e) { void e; }
+    }
   }
 
   function fuseChime() {                         // major 6th dyad, amber-tinted
@@ -337,12 +408,13 @@
   function teletype() { blipAt(1800, 0.015, 0.008, 0, 'square'); }
 
   NS.audio = {
-    ensure: ensure, setVolume: setVolume,
+    ensure: ensure, getContext: getContext, setVolume: setVolume,
     startAmbient: startAmbient, setAgitation: setAgitation, setBreath: setBreath,
     scanTick: scanTick, burstSweep: burstSweep, setCharge: setCharge,
     footstep: footstep, enemyStep: enemyStep, click: click, heartbeat: heartbeat,
     sting: sting, scareImpact: scareImpact, death: death, fuseChime: fuseChime, clunk: clunk,
-    generatorRoar: generatorRoar, doorGrind: doorGrind, teletype: teletype
+    generatorRoar: generatorRoar, doorGrind: doorGrind, teletype: teletype,
+    securityAlarm: securityAlarm, stopAllTransient: stopAllTransient
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));

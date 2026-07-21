@@ -27,10 +27,14 @@
   var C_WALL = [0.486, 1.0, 0.608];
   var C_FLOOR = [0.18, 0.52, 0.46];
   var C_CEIL = [0.30, 0.72, 0.42];
+  var C_HARBOR = [0.15, 1.0, 0.35];   // safe-zone LiDAR returns
+  var C_YELLOW = [1.0, 0.92, 0.12];   // laser alarm beams
   var C_AMBER = [1.0, 0.70, 0.28];
   var C_CYAN = [0.43, 0.91, 0.91];
   var C_RED = [1.0, 0.27, 0.27];
   var C_WHITE = [1.0, 1.0, 1.0];
+  var NOISE_LASER = 32;
+  var LASER_COOLDOWN = 10;
 
   var MEMO_TEXTS = [
     "DR. OKONKWO, ACOUSTICS — IT DOESN'T HAVE EYES. IT NEVER HAD EYES. MARCHETTI SAYS IT SEES THE ROOM THE WAY OUR RANGEFINDER DOES. PULSE AND RETURN. IT LIKED THE RD-9 TESTS. IT WOULD STAND AT THE GLASS. LISTENING.",
@@ -87,6 +91,7 @@
   var sens = 0.0022, reducedFlash = false;
   var deathCause = 'quiet';
   var clickTickFade = 0;
+  var laserCooldown = {};   // id -> remaining seconds
 
   // typewriter event line
   var msgQueue = [], curMsg = null, msgChars = 0, msgHold = 0;
@@ -153,9 +158,11 @@
       player.pitch = math.clamp(player.pitch, -1.45, 1.45);
     });
 
-    el.controls.addEventListener('click', function () {
+    el.controls.addEventListener('click', function (e) {
+      if (e.target && (e.target.id === 'enter-vr' || e.target.id === 'btn-mission-map' || e.target.closest('#btn-mission-map'))) return;
       A.ensure();
       A.startAmbient();
+      if (NS.mic) NS.mic.start();
       el.canvas.requestPointerLock();
     });
     el.boot.addEventListener('click', function (e) {
@@ -236,6 +243,7 @@
   var runActive = false;
   function startRun() {
     runActive = true;
+    if (A.stopAllTransient) A.stopAllTransient();
     R.clearPoints();
     EN.reset();
     math.srand(0x1988 ^ (Date.now() & 0xffff));
@@ -249,6 +257,7 @@
     trickleOn = false; auxLoud = 0; recentLoud = 0;
     floodLevel = 0; runTime = 0; deathCause = 'quiet';
     glitchLevel = 0; glitchPop = 0; popTimer = 5;
+    laserCooldown = {};
     msgQueue = []; curMsg = null;
     queueMsg('RD-9 RANGING ACTIVE. RETURNS ARE TRUTH.', '');
   }
@@ -268,8 +277,15 @@
   function finishDeath() {
     runActive = false;
     state = 'DEAD';
+    if (A.sting) A.sting(false);
     document.exitPointerLock();
     if (VR.active()) VR.end();
+    // hard-cut any lingering chase layers; death one-shot self-ends by 4s
+    setTimeout(function () {
+      if (state === 'DEAD' || state === 'CONTROLS' || state === 'BOOT') {
+        if (A.stopAllTransient) A.stopAllTransient();
+      }
+    }, 4200);
     var lines = {
       sweep: 'MID-SWEEP. LIKE BECK.',
       loud: 'YOU LIT THE DARK. THE DARK ANSWERED.',
@@ -320,7 +336,14 @@
     var bestT = hit ? hit.t : SCAN_RANGE + 1;
     var color = null, life = POINT_LIFE;
     if (hit) {
-      color = hit.type === 'floor' ? C_FLOOR : (hit.type === 'ceil' ? C_CEIL : C_WALL);
+      if (hit.type === 'floor' && M.isSafeAt(hit.x, hit.z)) color = C_HARBOR;
+      else color = hit.type === 'floor' ? C_FLOOR : (hit.type === 'ceil' ? C_CEIL : C_WALL);
+    }
+
+    // yellow laser beams
+    var lt = M.rayLaser(ox, oy, oz, dx, dy, dz, SCAN_RANGE);
+    if (lt > 0 && lt < bestT) {
+      bestT = lt; color = C_YELLOW; life = 8;
     }
 
     // the Custodian — red returns, fast decay
@@ -563,6 +586,34 @@
     EN.forceChase();
   }
 
+  function updateLasers(dt) {
+    var id;
+    for (id in laserCooldown) {
+      if (laserCooldown[id] > 0) laserCooldown[id] -= dt;
+    }
+    var hit = M.laserHitPlayer(player.x, player.z, PLAYER_RADIUS + 0.15);
+    if (!hit) return;
+    if (laserCooldown[hit.id] > 0) return;
+    laserCooldown[hit.id] = LASER_COOLDOWN;
+    var mx = (hit.x0 + hit.x1) * 0.5, mz = (hit.z0 + hit.z1) * 0.5;
+    A.securityAlarm();
+    EN.hear(mx, mz, NOISE_LASER, now, false);
+    EN.forceInvestigate(mx, mz);
+    recentLoud = Math.max(recentLoud, NOISE_LASER);
+    auxLoud = Math.max(auxLoud, 0.95);
+    queueMsg('SECURITY ALARM — ' + hit.id + ' — IT HEARD THAT', 'amber', 4);
+    // brief yellow paint of the beam for confirmation
+    for (var i = 0; i < 60; i++) {
+      var t = i / 59;
+      R.addPoint(
+        hit.x0 + (hit.x1 - hit.x0) * t + (math.rand() - 0.5) * 0.05,
+        hit.y0 + (hit.y1 - hit.y0) * math.rand(),
+        hit.z0 + (hit.z1 - hit.z0) * t + (math.rand() - 0.5) * 0.05,
+        C_YELLOW[0], C_YELLOW[1], C_YELLOW[2], now, 4
+      );
+    }
+  }
+
   function updateItems(dt) {
     if (seatLockout > 0) seatLockout -= dt;
 
@@ -789,7 +840,9 @@
       }
 
       updateScanner(dt);
+      updateLasers(dt);
       updateItems(dt);
+      if (NS.mic) NS.mic.tick(dt, state === 'PLAY', function (loud) { emitNoise(loud); });
       EN.update(dt, player, now, { onKill: onKill, onEnemyClick: onEnemyClick });
       updateHeartbeat(dt);
       updateMsg(dt);
@@ -848,15 +901,18 @@
     init: init,
     fusesCollected: function () { return fusesCollected; },
     onVRStart: function () {
+      if (A.stopAllTransient) A.stopAllTransient();
       if (!runActive) startRun();
       state = 'PLAY';
       showScreen(null);
       lastFrame = performance.now();
+      if (NS.mic) NS.mic.start();
     },
     onVREnd: function () {
       trickleOn = false;
       vrScanOrigin = null;
       vrScanDirection = null;
+      if (NS.mic) NS.mic.stop();
       if (state === 'PLAY') {
         state = 'CONTROLS';
         showScreen('controls');
