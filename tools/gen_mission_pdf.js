@@ -13,21 +13,25 @@ var rows = M.asciiRows().map(function (line, r) {
   return out;
 });
 
+var P = M.markers.P;
+var pCol = Math.floor(P.x / M.CELL), pRow = Math.floor(P.z / M.CELL);
+
 var body = [
   'HOLLOW — ENEMY C2 NODE — MISSION MAP',
   'SOS Cyber Raid Exercise',
   '',
+  'START / INFIL: grid col ' + pCol + ', row ' + pRow + '  (ASCII character P on the plot below)',
   'INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.',
   'Minimize emissions. Faraday harbors (S) dampen signature.',
   '',
-  'LEGEND: # wall  . floor  S harbor  P infil  1-3 keys  G jack-in  X LZ  m intel  C security',
+  'LEGEND: # wall  . floor  S harbor  P START/infil  1-3 keys  G jack-in  X LZ  m intel  C security',
   'DOORS: D1 D2 D3 (locked until keyed) · TRIPWIRES: ' + M.markers.lasers.map(function (l) { return l.id; }).join(', '),
   ''
 ].concat(rows).concat([
   '',
   'Operator=VR. Mission Director=this map + voice.',
   'After uplink: inbound then on-station window. Miss LZ = left behind.',
-  'Diagram: open game/map-print.html → Print → Save as PDF.'
+  'Diagram: open game/map-print.html → Print → Save as PDF (START shown as green P).'
 ]);
 
 function pdfEscape(s) {

@@ -55,7 +55,9 @@
       <span class="swatch" style="background:#0c0"></span> Faraday harbor<br>
       <span class="swatch" style="background:#fc0"></span> Tripwire alarm<br>
       <span class="swatch" style="background:#e67e00"></span> Blast door<br>
-      <b>P</b> Infil · <b>1–3</b> Keys · <b>G</b> Jack-in · <b>X</b> LZ · <b>m</b> Intel · <b>C</b> Security · <b>D</b> Door
+      <span class="swatch" style="background:#063;border-radius:50%"></span> <b>START</b> Infil (P)<br>
+      <b>1–3</b> Keys · <b>G</b> Jack-in · <b>X</b> LZ · <b>m</b> Intel · <b>C</b> Security · <b>D</b> Door
+      <div style="margin-top:6px">Infil grid: col 10, row 23 (atrium west of center).</div>
 
       <h2>EXFIL</h2>
       After uplink: inbound timer, then on-station window.
@@ -105,7 +107,35 @@
     ctx.fillText(text, x, y);
   }
 
-  label(M.markers.P, 'P', '#063');
+  // START / infil — high-visibility marker
+  (function () {
+    var P = M.markers.P;
+    if (!P) return;
+    var x = (P.x / M.CELL) * cellW, y = (P.z / M.CELL) * cellH;
+    var r = Math.max(cellW, cellH) * 0.85;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#0a7a3e';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#003318';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.35, 0, Math.PI * 2);
+    ctx.strokeStyle = '#0a7a3e';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold ' + Math.floor(cellW * 0.95) + 'px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('P', x, y);
+    ctx.fillStyle = '#003318';
+    ctx.font = 'bold ' + Math.max(9, Math.floor(cellW * 0.7)) + 'px Consolas, monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText('START', x, y + r * 1.45);
+  })();
+
   label(M.markers.G, 'G', '#840');
   label(M.markers.X, 'X', '#000');
   label(M.markers.C, 'C', '#900');
