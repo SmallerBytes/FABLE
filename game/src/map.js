@@ -110,20 +110,22 @@
     placeSafe(3, 33);   // pre-exit corridor
     placeSafe(4, 33);
 
-    // Yellow tripwires — wall-to-wall across hallways (not painted on wall faces).
-    // Endpoints sit just inside the wall faces so the beam is in walkable space.
+    // Yellow tripwires — single ankle-height beams across hallway / entrance chokes.
+    // Endpoints sit just inside wall faces; y band is thin so LiDAR paints one line.
     var IN = 0.08;
+    var TY = 0.22;   // metres above floor (ankle)
+    var TH = 0.03;   // half-height — keep as one laser, not a stacked ribbon
     markers.lasers = [
-      // fuse-1 NS choke (col 3, walls at 2 and 4)
-      { x0: 3 * CELL + IN, z0: 10.5 * CELL, x1: 4 * CELL - IN, z1: 10.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-STORAGE' },
-      // lab EW hall (cols 15–20)
-      { x0: 15 * CELL + IN, z0: 6.5 * CELL, x1: 21 * CELL - IN, z1: 6.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-LAB' },
-      // mid EW corridor (cols 20–28)
-      { x0: 20 * CELL + IN, z0: 11.5 * CELL, x1: 29 * CELL - IN, z1: 11.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-MID' },
-      // jack-in approach, EW hall west of D3 (cols 26–33)
-      { x0: 26 * CELL + IN, z0: 23.5 * CELL, x1: 34 * CELL - IN, z1: 23.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-GEN' },
-      // exit wing EW choke (cols 1–4; col 5 is a pillar)
-      { x0: 1 * CELL + IN, z0: 31.5 * CELL, x1: 5 * CELL - IN, z1: 31.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-EXIT' }
+      // fuse-1 NS hallway choke (walls east/west at col 3)
+      { x0: 3 * CELL + IN, z0: 10.5 * CELL, x1: 4 * CELL - IN, z1: 10.5 * CELL, y0: TY - TH, y1: TY + TH, id: 'L-STORAGE' },
+      // lab hallway entrance (walls north/south)
+      { x0: 18.5 * CELL, z0: 6 * CELL + IN, x1: 18.5 * CELL, z1: 7 * CELL - IN, y0: TY - TH, y1: TY + TH, id: 'L-LAB' },
+      // mid approach entrance near D1
+      { x0: 15.5 * CELL, z0: 15 * CELL + IN, x1: 15.5 * CELL, z1: 16 * CELL - IN, y0: TY - TH, y1: TY + TH, id: 'L-MID' },
+      // jack-in hallway entrance west of D3
+      { x0: 31.5 * CELL, z0: 23 * CELL + IN, x1: 31.5 * CELL, z1: 24 * CELL - IN, y0: TY - TH, y1: TY + TH, id: 'L-GEN' },
+      // exit corridor entrance near LZ
+      { x0: 5.5 * CELL, z0: 34 * CELL + IN, x1: 5.5 * CELL, z1: 35 * CELL - IN, y0: TY - TH, y1: TY + TH, id: 'L-EXIT' }
     ];
 
     // Blast doors — start locked (extra solid cells on approaches to jack-in)
@@ -326,7 +328,7 @@
   // Ray–laser: AABB slab hit on the floating tripwire sheet (wall-to-wall segment)
   function rayLaser(ox, oy, oz, dx, dy, dz, maxDist) {
     var best = -1;
-    var THICK = 0.12; // sheet thickness perpendicular to beam path
+    var THICK = 0.05; // thin ribbon — one beam, not a double sheet
     for (var i = 0; i < markers.lasers.length; i++) {
       var L = markers.lasers[i];
       var lx0 = Math.min(L.x0, L.x1), lx1 = Math.max(L.x0, L.x1);

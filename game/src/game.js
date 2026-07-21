@@ -684,13 +684,14 @@
     recentLoud = Math.max(recentLoud, NOISE_LASER);
     auxLoud = Math.max(auxLoud, 0.95);
     queueMsg('SECURITY ALARM — ' + hit.id + ' — IT HEARD THAT', 'amber', 4);
-    // brief yellow paint of the beam for confirmation
-    for (var i = 0; i < 60; i++) {
-      var t = i / 59;
+    // brief yellow paint of the single low beam
+    var by = (hit.y0 + hit.y1) * 0.5;
+    for (var i = 0; i < 48; i++) {
+      var t = i / 47;
       R.addPoint(
-        hit.x0 + (hit.x1 - hit.x0) * t + (math.rand() - 0.5) * 0.05,
-        hit.y0 + (hit.y1 - hit.y0) * math.rand(),
-        hit.z0 + (hit.z1 - hit.z0) * t + (math.rand() - 0.5) * 0.05,
+        hit.x0 + (hit.x1 - hit.x0) * t + (math.rand() - 0.5) * 0.03,
+        by + (math.rand() - 0.5) * 0.02,
+        hit.z0 + (hit.z1 - hit.z0) * t + (math.rand() - 0.5) * 0.03,
         C_YELLOW[0], C_YELLOW[1], C_YELLOW[2], now, 4
       );
     }
