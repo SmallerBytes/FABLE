@@ -180,13 +180,14 @@
     });
 
     el.controls.addEventListener('click', function (e) {
-      if (e.target && (e.target.id === 'enter-vr' || e.target.id === 'btn-mission-map' || e.target.closest('#btn-mission-map'))) return;
+      if (e.target && (e.target.id === 'enter-vr' || (e.target.closest && e.target.closest('a[href*="map-print"]')))) return;
       A.ensure();
       A.startAmbient();
       if (NS.mic) NS.mic.start();
       el.canvas.requestPointerLock();
     });
     el.boot.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('a[href*="map-print"]')) return;
       if (state === 'BOOT' && e.target.tagName !== 'INPUT') finishBoot();
     });
     el.death.addEventListener('click', function () {
