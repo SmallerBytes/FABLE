@@ -22,6 +22,34 @@
   var MEMO_RANGE_VR = 3.2;
   var VR_AIM_MAX = 5.5;
   var VR_AIM_DOT = 0.72;
+  var gfxQuality = 'medium';
+
+  var GFX = {
+    low: {
+      trickleRays: 90, burstColStep: 1.1 * Math.PI / 180, burstVSamples: 12,
+      pointLife: 40, xrMaxPoints: 120000, fboScale: 0.55, vrScale: 0.55, crt: 0.45
+    },
+    medium: {
+      trickleRays: 220, burstColStep: 0.55 * Math.PI / 180, burstVSamples: 26,
+      pointLife: 90, xrMaxPoints: 300000, fboScale: 0.85, vrScale: 0.8, crt: 0.75
+    },
+    high: {
+      trickleRays: 360, burstColStep: 0.35 * Math.PI / 180, burstVSamples: 40,
+      pointLife: 140, xrMaxPoints: 520000, fboScale: 1.0, vrScale: 1.0, crt: 1.0
+    }
+  };
+
+  function applyGraphics(level) {
+    var g = GFX[level] || GFX.medium;
+    gfxQuality = GFX[level] ? level : 'medium';
+    TRICKLE_RAYS = g.trickleRays;
+    BURST_COL_STEP = g.burstColStep;
+    BURST_V_SAMPLES = g.burstVSamples;
+    POINT_LIFE = g.pointLife;
+    if (R && R.setQuality) R.setQuality({ xrMaxPoints: g.xrMaxPoints, fboScale: g.fboScale, crt: g.crt });
+    if (VR && VR.setFramebufferScale) VR.setFramebufferScale(g.vrScale);
+    try { localStorage.setItem('hollow_gfx', gfxQuality); } catch (err) { void err; }
+  }
 
   // ---- palette (GDD §3.2) ----
   var C_WALL = [0.486, 1.0, 0.608];
@@ -221,6 +249,17 @@
     $('opt-sens').addEventListener('input', function (e) { sens = e.target.value * 0.000275; });
     $('opt-vol').addEventListener('input', function (e) { A.setVolume(e.target.value / 100); });
     $('opt-flash').addEventListener('change', function (e) { reducedFlash = e.target.checked; });
+    var gfxEl = $('opt-gfx');
+    if (gfxEl) {
+      var saved = 'medium';
+      try { saved = localStorage.getItem('hollow_gfx') || 'medium'; } catch (e) { void e; }
+      if (!GFX[saved]) saved = 'medium';
+      gfxEl.value = saved;
+      applyGraphics(saved);
+      gfxEl.addEventListener('change', function (e) { applyGraphics(e.target.value); });
+    } else {
+      applyGraphics('medium');
+    }
   }
 
   function showScreen(name) {

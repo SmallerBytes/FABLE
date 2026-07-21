@@ -5,6 +5,7 @@
   var CAPACITY = 700000;     // points (GDD §3.2)
   var STRIDE = 8;            // x y z r g b birth life
   var BYTES = STRIDE * 4;
+  var quality = { xrMaxPoints: 300000, fboScale: 0.85, crt: 0.75 };
 
   var gl = null, canvas = null;
   var pointProg = null, postProg = null;
@@ -243,10 +244,15 @@
   }
 
   function resize() {
-    var w = Math.floor(canvas.clientWidth * (window.devicePixelRatio || 1));
-    var h = Math.floor(canvas.clientHeight * (window.devicePixelRatio || 1));
+    var dpr = window.devicePixelRatio || 1;
+    var scale = quality.fboScale || 1;
+    var w = Math.floor(canvas.clientWidth * dpr * scale);
+    var h = Math.floor(canvas.clientHeight * dpr * scale);
     if (w === 0 || h === 0) return;
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    // keep canvas CSS size; FBO resolution tracks quality
+    var cw = Math.floor(canvas.clientWidth * dpr);
+    var ch = Math.floor(canvas.clientHeight * dpr);
+    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
     if (fboW === w && fboH === h) return;
     fboW = w; fboH = h;
     if (fboTex) { gl.deleteTexture(fboTex); gl.deleteFramebuffer(fbo); }
@@ -261,6 +267,14 @@
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  function setQuality(q) {
+    quality.xrMaxPoints = q.xrMaxPoints || quality.xrMaxPoints;
+    quality.fboScale = q.fboScale != null ? q.fboScale : quality.fboScale;
+    quality.crt = q.crt != null ? q.crt : quality.crt;
+    fboW = 0; fboH = 0; // force FBO rebuild
+    if (canvas) resize();
   }
 
   function addPoint(x, y, z, r, g, b, birth, life) {
@@ -343,7 +357,7 @@
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
 
-    drawPoints(proj, view, now);
+    drawPoints(proj, view, now, quality.xrMaxPoints);
 
     // pass 2: fbo -> screen with CRT
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -355,9 +369,9 @@
     gl.uniform1i(postUnis.uTex, 0);
     gl.uniform2f(postUnis.uRes, canvas.width, canvas.height);
     gl.uniform1f(postUnis.uTime, now);
-    gl.uniform1f(postUnis.uTear, opts.tear ? 1 : 0);
+    gl.uniform1f(postUnis.uTear, (opts.tear ? 1 : 0) * (quality.crt || 1));
     gl.uniform1f(postUnis.uFlood, opts.flood || 0);
-    gl.uniform1f(postUnis.uGlitch, opts.glitch || 0);
+    gl.uniform1f(postUnis.uGlitch, (opts.glitch || 0) * (0.35 + 0.65 * (quality.crt || 1)));
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVbo);
     gl.enableVertexAttribArray(postAttrs.aPos);
     gl.vertexAttribPointer(postAttrs.aPos, 2, gl.FLOAT, false, 0, 0);
@@ -495,7 +509,7 @@
     for (var i = 0; i < views.length; i++) {
       var v = views[i];
       gl.viewport(v.viewport.x, v.viewport.y, v.viewport.width, v.viewport.height);
-      drawPoints(v.projection, v.view, now, 300000);
+      drawPoints(v.projection, v.view, now, quality.xrMaxPoints || 300000);
       drawVRHud(v.projection, v.view);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -511,7 +525,7 @@
     init: init, resize: resize,
     addPoint: addPoint, pointCount: pointCount, clearPoints: clearPoints,
     render: render, renderXR: renderXR,
-    setVRHud: setVRHud, setWristModel: setWristModel,
+    setVRHud: setVRHud, setWristModel: setWristModel, setQuality: setQuality,
     getContext: function () { return gl; },
     makeXRCompatible: makeXRCompatible
   };

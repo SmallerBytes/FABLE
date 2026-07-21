@@ -8,6 +8,7 @@
   var bodyYaw = 0;
   var snapLatch = false;
   var previousButtons = {};
+  var framebufferScale = 0.8;
   var currentInput = {
     moveX: 0, moveY: 0, heading: 0,
     bodyYaw: 0,
@@ -52,7 +53,7 @@
         baseLayer: new XRWebGLLayer(session, gl, {
           alpha: false,
           antialias: false,
-          framebufferScaleFactor: 0.8
+          framebufferScaleFactor: framebufferScale
         }),
         depthNear: 0.05,
         depthFar: 220
@@ -248,6 +249,21 @@
     return session ? session.end() : Promise.resolve();
   }
 
+  function setFramebufferScale(scale) {
+    framebufferScale = Math.max(0.4, Math.min(1.0, scale || 0.8));
+    if (!session) return;
+    try {
+      var gl = NS.render.getContext();
+      session.updateRenderState({
+        baseLayer: new XRWebGLLayer(session, gl, {
+          alpha: false,
+          antialias: false,
+          framebufferScaleFactor: framebufferScale
+        })
+      });
+    } catch (e) { void e; }
+  }
+
   NS.vr = {
     init: init,
     enter: enter,
@@ -255,7 +271,8 @@
     end: end,
     input: function () { return currentInput; },
     viewsForPose: viewsForPose,
-    framebuffer: framebuffer
+    framebuffer: framebuffer,
+    setFramebufferScale: setFramebufferScale
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));
