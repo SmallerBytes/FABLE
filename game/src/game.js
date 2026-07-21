@@ -5,7 +5,7 @@
   var M, R, A, EN, VR, math;
 
   // ---- tuning constants (GDD §3) ----
-  var EYE_STAND = 1.6, EYE_CROUCH = 1.0;
+  var EYE_STAND = 1.85, EYE_CROUCH = 1.15;
   var SPEED_WALK = 3.2, SPEED_SPRINT = 5.6, SPEED_CROUCH = 1.6;
   var PLAYER_RADIUS = 0.35;
   var NOISE_CROUCH = 2, NOISE_WALK = 7, NOISE_SPRINT = 16;
@@ -601,7 +601,7 @@
     if (!wrist) return null;
     var c = Math.cos(bodyYaw), s = Math.sin(bodyYaw);
     var gx = player.x + c * wrist.localX - s * wrist.localZ;
-    var gy = wrist.y;
+    var gy = (VR && VR.worldYFromXR) ? VR.worldYFromXR(wrist.y) : wrist.y;
     var gz = player.z + s * wrist.localX + c * wrist.localZ;
 
     function axis(lx, ly, lz) {
@@ -1149,7 +1149,7 @@
             var c = Math.cos(vrInput.bodyYaw), s = Math.sin(vrInput.bodyYaw);
             vrScanOrigin = {
               x: player.x + c * vrInput.aimOrigin.localX - s * vrInput.aimOrigin.localZ,
-              y: vrInput.aimOrigin.y,
+              y: VR.worldYFromXR ? VR.worldYFromXR(vrInput.aimOrigin.y) : vrInput.aimOrigin.y,
               z: player.z + s * vrInput.aimOrigin.localX + c * vrInput.aimOrigin.localZ
             };
           } else {

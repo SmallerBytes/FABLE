@@ -9,6 +9,8 @@
   var snapLatch = false;
   var previousButtons = {};
   var framebufferScale = 0.8;
+  // Raise virtual floor slightly so standing/sitting feels less ground-hugging
+  var HEIGHT_BOOST = 0.28;
   var currentInput = {
     moveX: 0, moveY: 0, heading: 0,
     bodyYaw: 0,
@@ -223,7 +225,7 @@
     m[4] = 0;  m[5] = 1; m[6] = 0;  m[7] = 0;
     m[8] = s;  m[9] = 0; m[10] = c; m[11] = 0;
     m[12] = -(c * player.x + s * player.z);
-    m[13] = 0;
+    m[13] = -HEIGHT_BOOST;
     m[14] = s * player.x - c * player.z;
     m[15] = 1;
     return m;
@@ -249,6 +251,10 @@
     return session ? session.end() : Promise.resolve();
   }
 
+  function worldYFromXR(y) {
+    return (y || 0) + HEIGHT_BOOST;
+  }
+
   function setFramebufferScale(scale) {
     framebufferScale = Math.max(0.4, Math.min(1.0, scale || 0.8));
     if (!session) return;
@@ -272,7 +278,8 @@
     input: function () { return currentInput; },
     viewsForPose: viewsForPose,
     framebuffer: framebuffer,
-    setFramebufferScale: setFramebufferScale
+    setFramebufferScale: setFramebufferScale,
+    worldYFromXR: worldYFromXR
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));
