@@ -182,6 +182,10 @@
   var hudState = { hint: '', obj: '', aux: 0, stamina: 1, exhausted: false, timer: '', chg: '', contacts: [], yaw: 0, px: 0, pz: 0 };
   var hudDirty = true;
   var wristModel = null; // Float32Array(16) game-world model matrix
+  var circuitModel = null;
+  var circuitSrc = null;
+  var circuitTex = null;
+  var circuitDirty = true;
 
   function init(cnv) {
     canvas = cnv;
@@ -249,6 +253,14 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 640, 400, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    circuitTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, circuitTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 420, 460, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     resize();
   }
@@ -546,16 +558,22 @@
     wristModel = m || null;
   }
 
-  function drawVRHud(proj, view) {
-    if (!hudProg || !hudTex || !wristModel) return;
-    // Always repaint — radar pulse + stamina need live updates
-    paintHud();
-    gl.bindTexture(gl.TEXTURE_2D, hudTex);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
-    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hudCanvas);
+  function setCircuitPanel(srcCanvas, model) {
+    circuitSrc = srcCanvas || null;
+    circuitModel = model || null;
+    circuitDirty = true;
+  }
+
+  function drawTexturedQuad(proj, view, model, tex, srcCanvas, forceUpload) {
+    if (!hudProg || !tex || !model || !srcCanvas) return;
+    if (forceUpload) {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, srcCanvas);
+    }
     var math = NS.math;
-    var mvp = math.mat4Multiply(proj, math.mat4Multiply(view, wristModel));
+    var mvp = math.mat4Multiply(proj, math.mat4Multiply(view, model));
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
@@ -563,7 +581,7 @@
     gl.useProgram(hudProg);
     gl.uniformMatrix4fv(hudUnis.uMVP, false, mvp);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, hudTex);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.uniform1i(hudUnis.uTex, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, hudVbo);
     gl.enableVertexAttribArray(hudAttrs.aPos);
@@ -574,6 +592,20 @@
     gl.disableVertexAttribArray(hudAttrs.aPos);
     gl.disableVertexAttribArray(hudAttrs.aUv);
     gl.blendFunc(gl.ONE, gl.ONE);
+  }
+
+  function drawVRHud(proj, view) {
+    if (!hudProg || !hudTex || !wristModel) return;
+    paintHud();
+    drawTexturedQuad(proj, view, wristModel, hudTex, hudCanvas, true);
+  }
+
+  function drawCircuitPanel(proj, view) {
+    if (!circuitModel || !circuitSrc || !circuitTex) return;
+    var upload = circuitDirty;
+    if (NS.circuit && NS.circuit.consumeDirty) upload = NS.circuit.consumeDirty() || upload;
+    drawTexturedQuad(proj, view, circuitModel, circuitTex, circuitSrc, upload);
+    circuitDirty = false;
   }
 
   function renderXR(views, framebuffer, now) {
@@ -589,6 +621,7 @@
       var v = views[i];
       gl.viewport(v.viewport.x, v.viewport.y, v.viewport.width, v.viewport.height);
       drawPoints(v.projection, v.view, now, quality.xrMaxPoints || 300000);
+      drawCircuitPanel(v.projection, v.view);
       drawVRHud(v.projection, v.view);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -604,7 +637,7 @@
     init: init, resize: resize,
     addPoint: addPoint, pointCount: pointCount, clearPoints: clearPoints,
     render: render, renderXR: renderXR,
-    setVRHud: setVRHud, setWristModel: setWristModel, setQuality: setQuality,
+    setVRHud: setVRHud, setWristModel: setWristModel, setCircuitPanel: setCircuitPanel, setQuality: setQuality,
     getContext: function () { return gl; },
     makeXRCompatible: makeXRCompatible
   };

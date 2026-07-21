@@ -502,6 +502,50 @@
     return tca - Math.sqrt(r2 - d2);
   }
 
+  // Ray vs triangle (Möller–Trumbore). Returns t or -1.
+  function rayTri(ox, oy, oz, dx, dy, dz, ax, ay, az, bx, by, bz, cx, cy, cz) {
+    var e1x = bx - ax, e1y = by - ay, e1z = bz - az;
+    var e2x = cx - ax, e2y = cy - ay, e2z = cz - az;
+    var px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+    var det = e1x * px + e1y * py + e1z * pz;
+    if (det > -1e-8 && det < 1e-8) return -1;
+    var inv = 1 / det;
+    var tx = ox - ax, ty = oy - ay, tz = oz - az;
+    var u = (tx * px + ty * py + tz * pz) * inv;
+    if (u < 0 || u > 1) return -1;
+    var qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+    var v = (dx * qx + dy * qy + dz * qz) * inv;
+    if (v < 0 || u + v > 1) return -1;
+    var t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    return t > 1e-4 ? t : -1;
+  }
+
+  // Jack-in console as a square pyramid (apex up). Returns hit distance or -1.
+  function rayConsolePyramid(ox, oy, oz, dx, dy, dz) {
+    var gx = M.markers.G.x, gz = M.markers.G.z;
+    var apexY = 1.85, baseY = 0.35, half = 0.62;
+    var ax = gx, ay = apexY, az = gz;
+    var b0x = gx - half, b0y = baseY, b0z = gz - half;
+    var b1x = gx + half, b1y = baseY, b1z = gz - half;
+    var b2x = gx + half, b2y = baseY, b2z = gz + half;
+    var b3x = gx - half, b3y = baseY, b3z = gz + half;
+    var best = -1, t;
+    t = rayTri(ox, oy, oz, dx, dy, dz, ax, ay, az, b0x, b0y, b0z, b1x, b1y, b1z);
+    if (t > 0 && (best < 0 || t < best)) best = t;
+    t = rayTri(ox, oy, oz, dx, dy, dz, ax, ay, az, b1x, b1y, b1z, b2x, b2y, b2z);
+    if (t > 0 && (best < 0 || t < best)) best = t;
+    t = rayTri(ox, oy, oz, dx, dy, dz, ax, ay, az, b2x, b2y, b2z, b3x, b3y, b3z);
+    if (t > 0 && (best < 0 || t < best)) best = t;
+    t = rayTri(ox, oy, oz, dx, dy, dz, ax, ay, az, b3x, b3y, b3z, b0x, b0y, b0z);
+    if (t > 0 && (best < 0 || t < best)) best = t;
+    // base (optional underside)
+    t = rayTri(ox, oy, oz, dx, dy, dz, b0x, b0y, b0z, b2x, b2y, b2z, b1x, b1y, b1z);
+    if (t > 0 && (best < 0 || t < best)) best = t;
+    t = rayTri(ox, oy, oz, dx, dy, dz, b0x, b0y, b0z, b3x, b3y, b3z, b2x, b2y, b2z);
+    if (t > 0 && (best < 0 || t < best)) best = t;
+    return best;
+  }
+
   function castScanRay(dx, dy, dz) {
     var ox = vrScanOrigin ? vrScanOrigin.x : player.x;
     var oy = vrScanOrigin ? vrScanOrigin.y : player.eye;
@@ -546,7 +590,7 @@
       if (t > 0 && t < bestT) { bestT = t; color = C_DOOR; life = POINT_LIFE; }
     }
     if (!uplinkDone) {
-      t = raySphere(ox, oy, oz, dx, dy, dz, { x: M.markers.G.x, y: 1.1, z: M.markers.G.z, r: 0.7 });
+      t = rayConsolePyramid(ox, oy, oz, dx, dy, dz);
       if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
     }
 
@@ -754,6 +798,17 @@
       dot = (tfx * dx + tfz * dz) / dist;
       if (dot >= bestDot) { bestDot = dot; best = { kind: 'door', i: i, dist: dist }; }
     }
+    if (!uplinkDone && M.markers.G) {
+      tfx = M.markers.G.x - ox; tfz = M.markers.G.z - oz;
+      dist = Math.sqrt(tfx * tfx + tfz * tfz);
+      if (dist <= VR_AIM_MAX + 1.5) {
+        dot = dist > 0.01 ? (tfx * dx + tfz * dz) / dist : 1;
+        if (dot >= bestDot) {
+          bestDot = dot;
+          best = { kind: 'console', dist: dist };
+        }
+      }
+    }
     return best;
   }
 
@@ -765,6 +820,51 @@
     A.fuseChime();
     emitNoise(NOISE_INTERACT);
     queueMsg('ACCESS KEY RECOVERED ' + keysCollected + '/3', 'amber');
+  }
+
+  function tryJackIn() {
+    if (uplinkDone) {
+      pushMsg('UPLINK ALREADY LIVE — MOVE TO LZ', 'amber');
+      return;
+    }
+    if (M.isConsoleSealed()) {
+      pushMsg('CONSOLE SEALED — OPEN CONSOLE DOOR (NEEDS 3 KEYS)', 'red');
+      return;
+    }
+    if (CIR && CIR.isActive()) return;
+    pushMsg(inVR()
+      ? 'JACK-IN — RIGHT STICK MOVE TILE · A/X ROTATE'
+      : 'JACK-IN SEQUENCE — ROUTE THE MATRIX', 'amber');
+    CIR.open(startExfil, onCircuitTimeout);
+  }
+
+  // Floating jack-in matrix panel in front of the operator (VR-visible)
+  function buildCircuitModel() {
+    var yaw = player.yaw;
+    var sy = Math.sin(yaw), cy = Math.cos(yaw);
+    var dist = 1.05;
+    var px = player.x + sy * dist;
+    var py = player.eye - 0.08;
+    var pz = player.z - cy * dist;
+    var nx = -sy, ny = 0, nz = cy;
+    var right = math.vnorm(math.vcross([0, 1, 0], [nx, ny, nz]));
+    var up = math.vnorm(math.vcross([nx, ny, nz], right));
+    var sx = 0.72, sy2 = 0.78;
+    var m = new Float32Array(16);
+    m[0] = right[0] * sx; m[1] = right[1] * sx; m[2] = right[2] * sx; m[3] = 0;
+    m[4] = up[0] * sy2; m[5] = up[1] * sy2; m[6] = up[2] * sy2; m[7] = 0;
+    m[8] = nx; m[9] = ny; m[10] = nz; m[11] = 0;
+    m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
+    return m;
+  }
+
+  function syncCircuitPanel() {
+    if (!R.setCircuitPanel) return;
+    if (CIR && CIR.isActive() && inVR() && CIR.getCanvas) {
+      R.setCircuitPanel(CIR.getCanvas(), buildCircuitModel());
+    } else {
+      R.setCircuitPanel(null, null);
+    }
   }
 
   function interact() {
@@ -804,6 +904,10 @@
             pushMsg('OPTIONAL BLAST DOOR OPEN (' + unlockedAim.id + ')', 'amber');
           }
         }
+        return;
+      }
+      if (pick && pick.kind === 'console' && pick.dist <= range + 1.2) {
+        tryJackIn();
         return;
       }
     }
@@ -851,17 +955,7 @@
 
     // jack-in console — only console-room door must be open
     if (near(M.markers.G.x, M.markers.G.z, range + 0.5)) {
-      if (uplinkDone) {
-        pushMsg('UPLINK ALREADY LIVE — MOVE TO LZ', 'amber');
-        return;
-      }
-      if (M.isConsoleSealed()) {
-        pushMsg('CONSOLE SEALED — OPEN CONSOLE DOOR (NEEDS 3 KEYS)', 'red');
-        return;
-      }
-      if (CIR && CIR.isActive()) return;
-      pushMsg('JACK-IN SEQUENCE — ROUTE THE MATRIX', 'amber');
-      CIR.open(startExfil, onCircuitTimeout);
+      tryJackIn();
       return;
     }
 
@@ -1229,15 +1323,22 @@
       var vrInput = xrData ? xrData.input : null;
 
       if (CIR && CIR.isActive()) {
-        if (vrInput && vrInput.interactPressed) CIR.rotateSelected();
-        if (vrInput && R.setWristModel) {
-          R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
+        if (vrInput) {
+          if (vrInput.navX) CIR.moveSelection(vrInput.navX, 0);
+          if (vrInput.navY) CIR.moveSelection(0, vrInput.navY);
+          if (vrInput.interactPressed) CIR.rotateSelected();
+          if (R.setWristModel) {
+            R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
+          }
         }
         CIR.update(dt);
+        syncCircuitPanel();
         updateExfil(dt);
         updateMsg(dt);
         updateHUD(dt);
+        vrHudHint = 'STICK: MOVE TILE · A/X: ROTATE · ROUTE ENTRY→CORE';
       } else {
+        if (R.setCircuitPanel) R.setCircuitPanel(null, null);
         updatePlayer(dt, vrInput);
 
         if (vrInput) {
@@ -1339,6 +1440,8 @@
       trickleOn = false;
       vrScanOrigin = null;
       vrScanDirection = null;
+      if (CIR && CIR.isActive()) CIR.close();
+      if (R.setCircuitPanel) R.setCircuitPanel(null, null);
       if (R.setWristModel) R.setWristModel(null);
       if (NS.mic) NS.mic.stop();
       if (state === 'PLAY') {

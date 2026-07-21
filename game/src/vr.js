@@ -14,11 +14,14 @@
   var smoothTurn = false;
   var SMOOTH_TURN_RATE = 2.35; // rad/s at full stick
   var lastFrameTime = 0;
+  var navLatchX = false;
+  var navLatchY = false;
   var currentInput = {
     moveX: 0, moveY: 0, heading: 0,
     bodyYaw: 0,
     trickle: false, burstPressed: false, interactPressed: false,
     sprint: false,
+    navX: 0, navY: 0,
     aimOrigin: null, aimDirection: null,
     wrist: null // left-controller grip pose in XR local space
   };
@@ -161,10 +164,13 @@
     currentInput.burstPressed = false;
     currentInput.interactPressed = false;
     currentInput.sprint = false;
+    currentInput.navX = 0;
+    currentInput.navY = 0;
     currentInput.aimOrigin = null;
     currentInput.aimDirection = null;
     currentInput.wrist = null;
     dt = dt || 0.016;
+    var circuitLock = !!(NS.circuit && NS.circuit.isActive && NS.circuit.isActive());
 
     var rightSource = null;
     var leftSource = null;
@@ -174,12 +180,28 @@
       var axes = axesFor(gp);
       if (source.handedness === 'left') {
         leftSource = source;
-        currentInput.moveX = axes[0];
-        currentInput.moveY = -axes[1];
-        currentInput.sprint = leftSprint(gp);
+        if (!circuitLock) {
+          currentInput.moveX = axes[0];
+          currentInput.moveY = -axes[1];
+          currentInput.sprint = leftSprint(gp);
+        }
       } else if (source.handedness === 'right') {
         rightSource = source;
-        if (smoothTurn) {
+        if (circuitLock) {
+          // Right stick navigates circuit tiles (latched)
+          if (Math.abs(axes[0]) > 0.65 && !navLatchX) {
+            currentInput.navX = axes[0] > 0 ? 1 : -1;
+            navLatchX = true;
+          } else if (Math.abs(axes[0]) < 0.35) {
+            navLatchX = false;
+          }
+          if (Math.abs(axes[1]) > 0.65 && !navLatchY) {
+            currentInput.navY = axes[1] > 0 ? 1 : -1; // +Y is down on Quest stick
+            navLatchY = true;
+          } else if (Math.abs(axes[1]) < 0.35) {
+            navLatchY = false;
+          }
+        } else if (smoothTurn) {
           if (Math.abs(axes[0]) > 0.18) {
             bodyYaw += axes[0] * SMOOTH_TURN_RATE * dt;
           }
@@ -191,11 +213,12 @@
           snapLatch = false;
         }
       } else if (!leftSource && !rightSource) {
-        // Some browsers report handedness "none" — treat first pad as move+sprint
         leftSource = source;
-        currentInput.moveX = axes[0];
-        currentInput.moveY = -axes[1];
-        currentInput.sprint = leftSprint(gp);
+        if (!circuitLock) {
+          currentInput.moveX = axes[0];
+          currentInput.moveY = -axes[1];
+          currentInput.sprint = leftSprint(gp);
+        }
       }
 
       var id = source.handedness || String(i);

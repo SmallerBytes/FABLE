@@ -18,6 +18,7 @@
   var onTimeout = null;
   var canvas = null, ctx = null;
   var confirmHold = 0;
+  var dirty = true;
 
   function rotateMask(mask, turns) {
     turns = ((turns % 4) + 4) % 4;
@@ -49,6 +50,7 @@
     selected = 0;
     timeLeft = TIMEOUT;
     confirmHold = 0;
+    dirty = true;
   }
 
   function maskAt(c, r) {
@@ -83,6 +85,10 @@
       }
     }
     return false;
+  }
+
+  function inVR() {
+    return !!(NS.vr && NS.vr.active && NS.vr.active());
   }
 
   function ensureCanvas() {
@@ -142,7 +148,11 @@
     ctx.fillText('JACK-IN ROUTING MATRIX', canvas.width / 2, 22);
     ctx.fillStyle = '#3f8a55';
     ctx.font = '11px Consolas, monospace';
-    ctx.fillText('CLICK / A / E ROTATE TILE — CONNECT ENTRY TO CORE', canvas.width / 2, 40);
+    if (inVR()) {
+      ctx.fillText('RIGHT STICK MOVE TILE · A/X ROTATE · CONNECT ENTRY→CORE', canvas.width / 2, 40);
+    } else {
+      ctx.fillText('CLICK / A / E ROTATE TILE — CONNECT ENTRY TO CORE', canvas.width / 2, 40);
+    }
     ctx.fillStyle = timeLeft < 10 ? '#ff4444' : '#ffb347';
     ctx.fillText('LOCKOUT T-' + Math.ceil(timeLeft) + 's', canvas.width / 2, 56);
 
@@ -168,6 +178,7 @@
       ctx.font = '13px Consolas, monospace';
       ctx.fillText('PATH VALID — HOLDING TO CONFIRM…', canvas.width / 2, canvas.height - 16);
     }
+    dirty = true;
   }
 
   function update(dt) {
@@ -201,13 +212,25 @@
     render();
   }
 
+  function moveSelection(dc, dr) {
+    if (!active) return;
+    var c = selected % SIZE;
+    var r = Math.floor(selected / SIZE);
+    c = Math.max(0, Math.min(SIZE - 1, c + dc));
+    r = Math.max(0, Math.min(SIZE - 1, r + dr));
+    selected = idx(c, r);
+    confirmHold = 0;
+    render();
+  }
+
   function open(successCb, timeoutCb) {
     ensureCanvas();
     resetPuzzle();
     onSuccess = successCb;
     onTimeout = timeoutCb;
     active = true;
-    canvas.style.display = 'block';
+    // DOM overlay is desktop-only — WebXR cannot see HTML layers
+    canvas.style.display = inVR() ? 'none' : 'block';
     render();
   }
 
@@ -216,11 +239,19 @@
     if (canvas) canvas.style.display = 'none';
     onSuccess = null;
     onTimeout = null;
+    dirty = true;
   }
 
   NS.circuit = {
     open: open, close: close, update: update, rotateSelected: rotateSelected,
-    isActive: function () { return active; }
+    moveSelection: moveSelection,
+    isActive: function () { return active; },
+    getCanvas: function () { return canvas; },
+    consumeDirty: function () {
+      var d = dirty;
+      dirty = false;
+      return d;
+    }
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));
