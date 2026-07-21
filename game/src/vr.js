@@ -101,7 +101,16 @@
   }
 
   function pressed(gamepad, index) {
-    return !!(gamepad && gamepad.buttons[index] && gamepad.buttons[index].pressed);
+    if (!gamepad || !gamepad.buttons || !gamepad.buttons[index]) return false;
+    var b = gamepad.buttons[index];
+    return !!(b.pressed || b.value > 0.45);
+  }
+
+  function interactRising(id, gp) {
+    // Quest Touch: 3 = stick click, 4 = A/X, 5 = B/Y (grip is 1 — used for burst)
+    return rising(id + '-i3', pressed(gp, 3)) ||
+           rising(id + '-i4', pressed(gp, 4)) ||
+           rising(id + '-i5', pressed(gp, 5));
   }
 
   function rising(key, value) {
@@ -155,13 +164,13 @@
       }
 
       var id = source.handedness || String(i);
-      if (source.handedness === 'right' || (!rightSource && source.handedness === 'none')) {
+      if (source.handedness === 'right' || source.handedness === 'none') {
         currentInput.trickle = currentInput.trickle || pressed(gp, 0);
         currentInput.burstPressed = currentInput.burstPressed ||
           rising(id + '-burst', pressed(gp, 1));
-        currentInput.interactPressed = currentInput.interactPressed ||
-          rising(id + '-interact', pressed(gp, 4));
       }
+      // Interact on either hand (A/X, B/Y, stick click)
+      currentInput.interactPressed = currentInput.interactPressed || interactRising(id, gp);
     }
 
     if (!rightSource && session.inputSources.length) rightSource = session.inputSources[0];

@@ -17,6 +17,11 @@
   var POINT_LIFE = 90, ENEMY_POINT_LIFE = 2.5, BEACON_LIFE = 1.2;
   var SCAN_RANGE = 60;
   var INTERACT_RANGE = 2.4;
+  var INTERACT_RANGE_VR = 4.2;
+  var MEMO_RANGE = 1.3;
+  var MEMO_RANGE_VR = 3.2;
+  var VR_AIM_MAX = 5.5;
+  var VR_AIM_DOT = 0.72;
 
   // ---- palette (GDD §3.2) ----
   var C_WALL = [0.486, 1.0, 0.608];
@@ -427,15 +432,86 @@
   // ------------------------------------------------------------------
   // interaction & objectives
   // ------------------------------------------------------------------
+  function inVR() { return VR && VR.active(); }
+
+  function interactRange() { return inVR() ? INTERACT_RANGE_VR : INTERACT_RANGE; }
+
+  function memoRange() { return inVR() ? MEMO_RANGE_VR : MEMO_RANGE; }
+
   function near(x, z, range) {
     var dx = x - player.x, dz = z - player.z;
     return dx * dx + dz * dz < range * range;
   }
 
+  function readMemo(i) {
+    if (memos[i].read) return false;
+    memos[i].read = true;
+    queueMsg(MEMO_TEXTS[memos[i].i], 'cyan', 9);
+    A.fuseChime();
+    A.teletype();
+    A.teletype();
+    return true;
+  }
+
+  // Closest fuse/memo in front of the controller ray (VR-friendly pickup)
+  function vrAimPick() {
+    if (!vrScanDirection) return null;
+    var ox = player.x, oz = player.z;
+    var dx = vrScanDirection[0], dz = vrScanDirection[2];
+    var fl = Math.sqrt(dx * dx + dz * dz);
+    if (fl < 0.01) return null;
+    dx /= fl; dz /= fl;
+    var best = null, bestDot = VR_AIM_DOT;
+    var i, tfx, tfz, dist, dot;
+    for (i = 0; i < fuses.length; i++) {
+      if (fuses[i].taken) continue;
+      tfx = fuses[i].x - ox; tfz = fuses[i].z - oz;
+      dist = Math.sqrt(tfx * tfx + tfz * tfz);
+      if (dist > VR_AIM_MAX) continue;
+      dot = (tfx * dx + tfz * dz) / dist;
+      if (dot >= bestDot) { bestDot = dot; best = { kind: 'fuse', i: i, dist: dist }; }
+    }
+    for (i = 0; i < memos.length; i++) {
+      if (memos[i].read) continue;
+      tfx = memos[i].x - ox; tfz = memos[i].z - oz;
+      dist = Math.sqrt(tfx * tfx + tfz * tfz);
+      if (dist > VR_AIM_MAX) continue;
+      dot = (tfx * dx + tfz * dz) / dist;
+      if (dot >= bestDot) { bestDot = dot; best = { kind: 'memo', i: i, dist: dist }; }
+    }
+    return best;
+  }
+
   function interact() {
+    var range = interactRange();
+
+    if (inVR()) {
+      var pick = vrAimPick();
+      if (pick && pick.kind === 'memo') {
+        readMemo(pick.i);
+        return;
+      }
+      if (pick && pick.kind === 'fuse' && pick.dist <= range) {
+        fuses[pick.i].taken = true;
+        fusesCollected++;
+        EN.addAgitationFloor(15);
+        A.fuseChime();
+        emitNoise(NOISE_INTERACT);
+        queueMsg('FUSE RECOVERED ' + fusesCollected + '/3', 'amber');
+        return;
+      }
+    }
+
+    // memos (desktop walk-over is in updateItems; VR can also press interact while close)
+    for (var m = 0; m < memos.length; m++) {
+      if (!memos[m].read && near(memos[m].x, memos[m].z, memoRange())) {
+        if (readMemo(m)) return;
+      }
+    }
+
     // fuse pickup
     for (var i = 0; i < fuses.length; i++) {
-      if (!fuses[i].taken && near(fuses[i].x, fuses[i].z, INTERACT_RANGE)) {
+      if (!fuses[i].taken && near(fuses[i].x, fuses[i].z, range)) {
         fuses[i].taken = true;
         fusesCollected++;
         EN.addAgitationFloor(15);            // GDD §5.4 — endgame pressure
@@ -446,7 +522,7 @@
       }
     }
     // generator seating
-    if (near(M.markers.G.x, M.markers.G.z, INTERACT_RANGE + 0.5)) {
+    if (near(M.markers.G.x, M.markers.G.z, range + 0.5)) {
       if (seatLockout > 0) return;
       if (fusesSeated >= fusesCollected) {
         queueMsg(fusesCollected >= 3 ? 'SOCKET JAMMED' : 'NO FUSE IN HAND', '');
@@ -464,7 +540,7 @@
       return;
     }
     // exit door
-    if (near(M.markers.X.x, M.markers.X.z, INTERACT_RANGE + 0.4)) {
+    if (near(M.markers.X.x, M.markers.X.z, range + 0.4)) {
       if (!powered) {
         queueMsg('DOOR DEAD — NO POWER', 'red');
         emitNoise(NOISE_INTERACT);
@@ -492,9 +568,8 @@
 
     // memos auto-read on walk-over
     for (var i = 0; i < memos.length; i++) {
-      if (!memos[i].read && near(memos[i].x, memos[i].z, 1.3)) {
-        memos[i].read = true;
-        queueMsg(MEMO_TEXTS[memos[i].i], 'cyan', 9);
+      if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
+        readMemo(i);
       }
     }
 
@@ -518,11 +593,25 @@
     // interact hints (only when the line is idle)
     if (!curMsg) {
       var hint = '';
+      var hintRange = inVR() ? INTERACT_RANGE_VR : INTERACT_RANGE;
       for (i = 0; i < fuses.length; i++) {
-        if (!fuses[i].taken && near(fuses[i].x, fuses[i].z, INTERACT_RANGE)) hint = '[E] RECOVER FUSE';
+        if (!fuses[i].taken && near(fuses[i].x, fuses[i].z, hintRange)) {
+          hint = inVR() ? '[A] RECOVER FUSE (AIM CYAN/AMBER)' : '[E] RECOVER FUSE';
+        }
       }
-      if (near(M.markers.G.x, M.markers.G.z, INTERACT_RANGE + 0.5) && fusesSeated < 3) hint = '[E] SEAT FUSE';
-      if (near(M.markers.X.x, M.markers.X.z, INTERACT_RANGE + 0.4)) hint = powered ? '[E] OPEN FREIGHT DOOR' : '[E] FREIGHT DOOR (DEAD)';
+      if (near(M.markers.G.x, M.markers.G.z, hintRange + 0.5) && fusesSeated < 3) {
+        hint = inVR() ? '[A] SEAT FUSE' : '[E] SEAT FUSE';
+      }
+      if (near(M.markers.X.x, M.markers.X.z, hintRange + 0.4)) {
+        hint = powered
+          ? (inVR() ? '[A] OPEN FREIGHT DOOR' : '[E] OPEN FREIGHT DOOR')
+          : (inVR() ? '[A] FREIGHT DOOR (DEAD)' : '[E] FREIGHT DOOR (DEAD)');
+      }
+      for (i = 0; i < memos.length; i++) {
+        if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
+          hint = inVR() ? '[A] READ MEMO' : '';
+        }
+      }
       if (hint) { el.eventline.textContent = hint; el.eventline.className = ''; }
       else if (!msgQueue.length) el.eventline.textContent = '';
     }
