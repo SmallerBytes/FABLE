@@ -43,7 +43,7 @@
 
   var MEMO_TEXTS = [
     "SIGINT FRAGMENT — TARGET NODE UNDER EMCON BLACKOUT. ACTIVE SCANNING IS DETECTABLE. SECURITY HOMES ON EMISSIONS.",
-    "OPS NOTE — ACCESS KEYS SCATTERED IN THE WING. EACH KEY OPENS ONE BLAST DOOR ON THE APPROACH TO THE JACK-IN CONSOLE.",
+    "OPS NOTE — ACCESS KEYS SCATTERED IN THE WING. ALL THREE ARE REQUIRED TO OPEN THE CONSOLE-ROOM DOOR. OTHER BLAST DOORS ARE OPTIONAL SHORTCUTS (ONE KEY EACH).",
     "BRIEF ADDENDUM — AFTER UPLINK, EXFIL LZ GOES HOT. CHOPPER INBOUND THEN ON-STATION. IF YOU MISS THE WINDOW YOU ARE LEFT BEHIND.",
     "SECURITY PROFILE — COUNTER-INTRUSION UNIT IS BLIND BUT ACOUSTIC. FARADAY HARBORS DAMPEN YOUR SIGNATURE. TRIPWIRES ALARM THE GRID."
   ];
@@ -58,7 +58,8 @@
     "COMMS BAFFLE .......... DEGRADED",
     "",
     "TASKING: INFILTRATE ENEMY C2 NODE (BLACKOUT).",
-    "RECOVER 3 ACCESS KEYS. UNLOCK BLAST DOORS.",
+    "RECOVER 3 ACCESS KEYS. OPEN CONSOLE DOOR (D3).",
+    "OPTIONAL BLAST DOORS ARE SHORTCUTS ONLY.",
     "JACK INTO CORE ROUTING MATRIX. ESTABLISH UPLINK.",
     "EXFIL TO LZ WHEN CHOPPER IS ON STATION.",
     "MINIMIZE EMISSIONS. SECURITY WILL HEAR YOU."
@@ -95,6 +96,8 @@
   var burst = { active: false, t: 0, cooldown: 0 };
   var accessKeys = [], memos = [];
   var keysCollected = 0, doorsOpen = 0;
+  var vrHudHint = '';
+  var vrHudObj = '';
   var uplinkDone = false;
   var exfilPhase = 'NONE'; // NONE | INBOUND | ON_STATION | GONE
   var exfilTimer = 0;
@@ -550,7 +553,7 @@
     return true;
   }
 
-  // Closest fuse/memo in front of the controller ray (VR-friendly pickup)
+  // Closest key/memo/door in front of the controller ray (VR-friendly pickup)
   function vrAimPick() {
     if (!vrScanDirection) return null;
     var ox = player.x, oz = player.z;
@@ -575,6 +578,14 @@
       if (dist > VR_AIM_MAX) continue;
       dot = (tfx * dx + tfz * dz) / dist;
       if (dot >= bestDot) { bestDot = dot; best = { kind: 'memo', i: i, dist: dist }; }
+    }
+    for (i = 0; i < M.markers.doors.length; i++) {
+      if (!M.markers.doors[i].locked) continue;
+      tfx = M.markers.doors[i].x - ox; tfz = M.markers.doors[i].z - oz;
+      dist = Math.sqrt(tfx * tfx + tfz * tfz);
+      if (dist > VR_AIM_MAX) continue;
+      dot = (tfx * dx + tfz * dz) / dist;
+      if (dot >= bestDot) { bestDot = dot; best = { kind: 'door', i: i, dist: dist }; }
     }
     return best;
   }
@@ -603,6 +614,31 @@
         takeKey(pick.i);
         return;
       }
+      if (pick && pick.kind === 'door' && pick.dist <= range + 0.8) {
+        // fall through to door unlock using that door via near() — force proximity by using door coords
+        var aimed = M.markers.doors[pick.i];
+        var needAim = aimed.keysRequired || (aimed.console ? 3 : 1);
+        if (keysCollected < needAim) {
+          if (aimed.console || aimed.id === 'D3') {
+            pushMsg('CONSOLE DOOR — NEED ALL 3 KEYS (' + keysCollected + '/3)', 'amber');
+          } else {
+            pushMsg('BLAST DOOR LOCKED — NEED ACCESS KEY', 'amber');
+          }
+          return;
+        }
+        var unlockedAim = M.unlockDoor(aimed.id);
+        if (unlockedAim) {
+          doorsOpen = M.doorsOpenCount();
+          A.clunk(0);
+          emitNoise(NOISE_INTERACT);
+          if (unlockedAim.console || unlockedAim.id === 'D3') {
+            pushMsg('CONSOLE DOOR OPEN — JACK-IN READY', 'amber');
+          } else {
+            pushMsg('OPTIONAL BLAST DOOR OPEN (' + unlockedAim.id + ')', 'amber');
+          }
+        }
+        return;
+      }
     }
 
     for (var m = 0; m < memos.length; m++) {
@@ -618,14 +654,18 @@
       }
     }
 
-    // unlock nearest locked door if we have unused keys
-    var keysAvailable = keysCollected - doorsOpen;
+    // unlock nearest locked door (D3 needs all 3 keys; D1/D2 optional, 1 key)
     for (i = 0; i < M.markers.doors.length; i++) {
       var door = M.markers.doors[i];
       if (!door.locked) continue;
       if (!near(door.x, door.z, range + 0.8)) continue;
-      if (keysAvailable <= 0) {
-        queueMsg('BLAST DOOR LOCKED — NEED ACCESS KEY', 'amber');
+      var need = door.keysRequired || (door.console ? 3 : 1);
+      if (keysCollected < need) {
+        if (door.console || door.id === 'D3') {
+          pushMsg('CONSOLE DOOR — NEED ALL 3 KEYS (' + keysCollected + '/3)', 'amber');
+        } else {
+          pushMsg('BLAST DOOR LOCKED — NEED ACCESS KEY', 'amber');
+        }
         return;
       }
       var unlocked = M.unlockDoor(door.id);
@@ -633,23 +673,27 @@
         doorsOpen = M.doorsOpenCount();
         A.clunk(0);
         emitNoise(NOISE_INTERACT);
-        queueMsg('BLAST DOOR OPEN ' + doorsOpen + '/3', 'amber');
+        if (unlocked.console || unlocked.id === 'D3') {
+          pushMsg('CONSOLE DOOR OPEN — JACK-IN READY', 'amber');
+        } else {
+          pushMsg('OPTIONAL BLAST DOOR OPEN (' + unlocked.id + ')', 'amber');
+        }
       }
       return;
     }
 
-    // jack-in console
+    // jack-in console — only console-room door must be open
     if (near(M.markers.G.x, M.markers.G.z, range + 0.5)) {
       if (uplinkDone) {
-        queueMsg('UPLINK ALREADY LIVE — MOVE TO LZ', 'amber');
+        pushMsg('UPLINK ALREADY LIVE — MOVE TO LZ', 'amber');
         return;
       }
-      if (doorsOpen < 3) {
-        queueMsg('CONSOLE SEALED — OPEN ALL BLAST DOORS', 'red');
+      if (M.isConsoleSealed()) {
+        pushMsg('CONSOLE SEALED — OPEN CONSOLE DOOR (NEEDS 3 KEYS)', 'red');
         return;
       }
       if (CIR && CIR.isActive()) return;
-      queueMsg('JACK-IN SEQUENCE — ROUTE THE MATRIX', 'amber');
+      pushMsg('JACK-IN SEQUENCE — ROUTE THE MATRIX', 'amber');
       CIR.open(startExfil, onCircuitTimeout);
       return;
     }
@@ -739,31 +783,67 @@
     if (!curMsg && !(CIR && CIR.isActive())) {
       var hint = '';
       var hintRange = inVR() ? INTERACT_RANGE_VR : INTERACT_RANGE;
+      var btn = inVR() ? '[A/X]' : '[E]';
+      if (inVR()) {
+        var aim = vrAimPick();
+        if (aim && aim.kind === 'key' && aim.dist <= hintRange + 0.6) {
+          hint = btn + ' RECOVER ACCESS KEY';
+        } else if (aim && aim.kind === 'door' && aim.dist <= hintRange + 0.8) {
+          var ad = M.markers.doors[aim.i];
+          var an = ad.keysRequired || (ad.console ? 3 : 1);
+          if (keysCollected < an) {
+            hint = (ad.console || ad.id === 'D3')
+              ? 'CONSOLE DOOR — NEED 3 KEYS (' + keysCollected + '/3)'
+              : 'BLAST DOOR — NEED KEY';
+          } else {
+            hint = (ad.console || ad.id === 'D3')
+              ? btn + ' OPEN CONSOLE DOOR'
+              : btn + ' UNLOCK BLAST DOOR';
+          }
+        } else if (aim && aim.kind === 'memo' && aim.dist <= memoRange() + 0.4) {
+          hint = btn + ' READ INTEL';
+        }
+      }
       for (i = 0; i < accessKeys.length; i++) {
         if (!accessKeys[i].taken && near(accessKeys[i].x, accessKeys[i].z, hintRange)) {
-          hint = inVR() ? '[A] RECOVER ACCESS KEY' : '[E] RECOVER ACCESS KEY';
+          hint = btn + ' RECOVER ACCESS KEY';
         }
       }
       for (i = 0; i < M.markers.doors.length; i++) {
-        if (M.markers.doors[i].locked && near(M.markers.doors[i].x, M.markers.doors[i].z, hintRange + 0.8)) {
-          hint = inVR() ? '[A] UNLOCK BLAST DOOR' : '[E] UNLOCK BLAST DOOR';
+        var hd = M.markers.doors[i];
+        if (hd.locked && near(hd.x, hd.z, hintRange + 0.8)) {
+          var needH = hd.keysRequired || (hd.console ? 3 : 1);
+          if (keysCollected < needH) {
+            hint = (hd.console || hd.id === 'D3')
+              ? 'CONSOLE DOOR — NEED 3 KEYS (' + keysCollected + '/3)'
+              : 'BLAST DOOR — NEED KEY';
+          } else {
+            hint = (hd.console || hd.id === 'D3')
+              ? btn + ' OPEN CONSOLE DOOR'
+              : btn + ' UNLOCK BLAST DOOR';
+          }
         }
       }
       if (near(M.markers.G.x, M.markers.G.z, hintRange + 0.5) && !uplinkDone) {
-        hint = doorsOpen < 3
-          ? (inVR() ? '[A] CONSOLE SEALED' : '[E] CONSOLE SEALED')
-          : (inVR() ? '[A] JACK INTO CORE' : '[E] JACK INTO CORE');
+        hint = M.isConsoleSealed()
+          ? 'CONSOLE SEALED — OPEN D3 (3 KEYS)'
+          : btn + ' JACK INTO CORE';
       }
       if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS + 1)) {
         hint = 'ENTER FLASHING LZ — BOARD NOW';
       }
       for (i = 0; i < memos.length; i++) {
         if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
-          hint = inVR() ? '[A] READ INTEL' : '';
+          hint = inVR() ? btn + ' READ INTEL' : '';
         }
       }
+      vrHudHint = hint;
       if (hint) { el.eventline.textContent = hint; el.eventline.className = ''; }
       else if (!msgQueue.length) el.eventline.textContent = '';
+    } else if (curMsg) {
+      vrHudHint = curMsg.text || '';
+    } else {
+      vrHudHint = '';
     }
   }
 
@@ -884,16 +964,29 @@
         return '<span class="energized">CHOPPER INBOUND T-' + pad(Math.max(0, Math.ceil(exfilTimer)), 2) + '</span>';
       }
       if (uplinkDone) return '<span class="energized">UPLINK LIVE</span>';
-      if (doorsOpen < 3) {
-        return 'KEY ' + keysCollected + '/3 · DOOR ' + doorsOpen + '/3';
+      if (M.isConsoleSealed()) {
+        return 'KEY ' + keysCollected + '/3 · CONSOLE DOOR';
       }
-      return 'KEY 3/3 · JACK-IN READY';
+      return 'KEY ' + keysCollected + '/3 · JACK-IN READY';
     })();
+    vrHudObj = el.obj.textContent || el.obj.innerText || '';
 
-    // AUX needle: own emission, decaying over ~1 s
+    // AUX needle: own emission + live mic level
     auxLoud = Math.max(0, auxLoud - dt * 1.1);
     recentLoud = Math.max(0, recentLoud - dt * 14);
-    el.auxFill.style.width = Math.min(100, auxLoud * 100) + '%';
+    var micL = (NS.mic && NS.mic.level) ? NS.mic.level() : 0;
+    var shownAux = Math.max(auxLoud, micL);
+    el.auxFill.style.width = Math.min(100, shownAux * 100) + '%';
+
+    if (R.setVRHud) {
+      R.setVRHud({
+        hint: vrHudHint,
+        obj: vrHudObj,
+        aux: shownAux,
+        timer: el.timer.textContent,
+        chg: el.chg.textContent
+      });
+    }
 
     // click direction tick (accessibility twin, GDD §7.4)
     if (clickTickFade > 0) {

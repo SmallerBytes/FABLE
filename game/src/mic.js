@@ -73,6 +73,13 @@
     if (loud > 0.5) emitNoiseFn(loud);
   }
 
-  NS.mic = { start: start, stop: stop, tick: tick, active: function () { return enabled; } };
+  NS.mic = {
+    start: start, stop: stop, tick: tick,
+    active: function () { return enabled; },
+    level: function () {
+      if (!enabled) return 0;
+      return Math.min(1, rms() / 0.18);
+    }
+  };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));

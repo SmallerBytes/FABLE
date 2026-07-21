@@ -21,12 +21,12 @@ Fictional enemy C2 node raid. No real unit OPSEC.
 
 ## Commander's intent (read aloud)
 
-> Infiltrate the blackout node, recover three access keys, open the blast doors, jack into the core, and extract via the LZ when the chopper is on station. Minimize emissions. If compromised, break to Faraday harbors and reorient. Success is uplink **and** extract.
+> Infiltrate the blackout node, recover three access keys, open the **console-room door (D3)**, jack into the core, and extract via the LZ when the chopper is on station. Other blast doors are optional shortcuts. Minimize emissions. If compromised, break to Faraday harbors and reorient. Success is uplink **and** extract.
 
 ## Mission flow
 
 1. Recover **3 access keys** (amber)
-2. Unlock **3 blast doors**
+2. Open **console door D3** (requires all 3 keys). D1/D2 optional (1 key each)
 3. **Jack-in** at the console (circuit routing puzzle)
 4. **Chopper inbound** (~40s) — LZ pulses slowly
 5. **On station** (~25s) — LZ flashes fast; enter the white pad or **left behind**

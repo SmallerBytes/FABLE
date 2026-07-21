@@ -129,10 +129,11 @@
     ];
 
     // Blast doors — start locked (must sit in real wall gaps / chokes)
+    // D3 is the console-room door (needs all 3 keys). D1/D2 are optional shortcuts.
     markers.doors = [
-      { id: 'D1', c: 17, r: 10, locked: true },  // gap in mid horizontal wall (north approach)
-      { id: 'D2', c: 26, r: 27, locked: true },  // south corridor choke toward console
-      { id: 'D3', c: 34, r: 23, locked: true }   // jack-in antechamber doorway
+      { id: 'D1', c: 17, r: 10, locked: true, keysRequired: 1 },
+      { id: 'D2', c: 26, r: 27, locked: true, keysRequired: 1 },
+      { id: 'D3', c: 34, r: 23, locked: true, keysRequired: 3, console: true }
     ];
     doorSolid = {};
     markers.doors.forEach(function (d) {
@@ -410,6 +411,18 @@
     return n;
   }
 
+  function consoleDoor() {
+    for (var i = 0; i < markers.doors.length; i++) {
+      if (markers.doors[i].console || markers.doors[i].id === 'D3') return markers.doors[i];
+    }
+    return null;
+  }
+
+  function isConsoleSealed() {
+    var d = consoleDoor();
+    return !!(d && d.locked);
+  }
+
   NS.map = {
     CELL: CELL, WALL_H: WALL_H, ROWS: function () { return ROWS; }, COLS: function () { return COLS; },
     markers: markers,
@@ -418,7 +431,8 @@
     raycast: raycast, wallsBetween: wallsBetween, astar: astar,
     moveWithCollision: moveWithCollision, patrolWaypoints: patrolWaypoints,
     rayLaser: rayLaser, laserHitPlayer: laserHitPlayer, asciiRows: asciiRows,
-    unlockDoor: unlockDoor, resetDoors: resetDoors, doorsOpenCount: doorsOpenCount
+    unlockDoor: unlockDoor, resetDoors: resetDoors, doorsOpenCount: doorsOpenCount,
+    consoleDoor: consoleDoor, isConsoleSealed: isConsoleSealed
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));
