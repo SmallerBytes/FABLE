@@ -110,20 +110,20 @@
     placeSafe(3, 33);   // pre-exit corridor
     placeSafe(4, 33);
 
-    // Yellow laser tripwires — float mid-air across corridor mouths (wall→wall).
-    // Axis-aligned segments in world metres; thin Y band so LiDAR paints a beam.
-    var ty0 = 0.95, ty1 = 1.35;
+    // Yellow tripwires — wall-to-wall across hallways (not painted on wall faces).
+    // Endpoints sit just inside the wall faces so the beam is in walkable space.
+    var IN = 0.08;
     markers.lasers = [
-      // N–S choke at col 3 / row 10 (storage approach)
-      { x0: 3.05 * CELL, z0: 10.5 * CELL, x1: 3.95 * CELL, z1: 10.5 * CELL, y0: ty0, y1: ty1, id: 'L-STORAGE' },
-      // N–S choke at col 17 / row 10 (lab approach)
-      { x0: 17.05 * CELL, z0: 10.5 * CELL, x1: 17.95 * CELL, z1: 10.5 * CELL, y0: ty0, y1: ty1, id: 'L-LAB' },
-      // Wide gap cols 23–25 / row 10 (mid belt)
-      { x0: 23.05 * CELL, z0: 10.5 * CELL, x1: 25.95 * CELL, z1: 10.5 * CELL, y0: ty0, y1: ty1, id: 'L-MID' },
-      // Jack-in alcove mouth (N–S beam across doorway)
-      { x0: 35.0 * CELL, z0: 21.1 * CELL, x1: 35.0 * CELL, z1: 24.9 * CELL, y0: ty0, y1: ty1, id: 'L-GEN' },
-      // Exit shaft (cols 1–4), south of X — must cross to extract
-      { x0: 1.05 * CELL, z0: 33.5 * CELL, x1: 4.95 * CELL, z1: 33.5 * CELL, y0: ty0, y1: ty1, id: 'L-EXIT' }
+      // fuse-1 NS choke (col 3, walls at 2 and 4)
+      { x0: 3 * CELL + IN, z0: 10.5 * CELL, x1: 4 * CELL - IN, z1: 10.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-STORAGE' },
+      // lab EW hall (cols 15–20)
+      { x0: 15 * CELL + IN, z0: 6.5 * CELL, x1: 21 * CELL - IN, z1: 6.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-LAB' },
+      // mid EW corridor (cols 20–28)
+      { x0: 20 * CELL + IN, z0: 11.5 * CELL, x1: 29 * CELL - IN, z1: 11.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-MID' },
+      // jack-in approach, EW hall west of D3 (cols 26–33)
+      { x0: 26 * CELL + IN, z0: 23.5 * CELL, x1: 34 * CELL - IN, z1: 23.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-GEN' },
+      // exit wing EW hall (cols 1–7)
+      { x0: 1 * CELL + IN, z0: 31.5 * CELL, x1: 8 * CELL - IN, z1: 31.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-EXIT' }
     ];
 
     // Blast doors — start locked (extra solid cells on approaches to jack-in)
@@ -323,40 +323,45 @@
     return pts;
   }
 
-  // Ray–laser: axis-aligned floating ribbon (thin vertical plane along the segment)
+  // Ray–laser: AABB slab hit on the floating tripwire sheet (wall-to-wall segment)
   function rayLaser(ox, oy, oz, dx, dy, dz, maxDist) {
     var best = -1;
-    var HALF = 0.04; // ribbon thickness so LiDAR can catch it
+    var THICK = 0.12; // sheet thickness perpendicular to beam path
     for (var i = 0; i < markers.lasers.length; i++) {
       var L = markers.lasers[i];
-      var ax = L.x0, az = L.z0, bx = L.x1, bz = L.z1;
-      var alongX = Math.abs(bx - ax) >= Math.abs(bz - az);
-      var tHit = -1;
-      if (alongX) {
-        // segment runs in X at constant Z — intersect plane z = az
-        if (Math.abs(dz) < 1e-8) continue;
-        var t = (az - oz) / dz;
-        if (t <= 0 || t > maxDist) continue;
-        var py = oy + dy * t, px = ox + dx * t;
-        if (py < L.y0 || py > L.y1) continue;
-        var x0 = Math.min(ax, bx), x1 = Math.max(ax, bx);
-        if (px < x0 || px > x1) continue;
-        if (Math.abs((oz + dz * t) - az) > HALF + 1e-6) continue;
-        tHit = t;
-      } else {
-        // segment runs in Z at constant X — intersect plane x = ax
-        if (Math.abs(dx) < 1e-8) continue;
-        t = (ax - ox) / dx;
-        if (t <= 0 || t > maxDist) continue;
-        py = oy + dy * t;
-        var pz = oz + dz * t;
-        if (py < L.y0 || py > L.y1) continue;
-        var z0 = Math.min(az, bz), z1 = Math.max(az, bz);
-        if (pz < z0 || pz > z1) continue;
-        if (Math.abs((ox + dx * t) - ax) > HALF + 1e-6) continue;
-        tHit = t;
+      var lx0 = Math.min(L.x0, L.x1), lx1 = Math.max(L.x0, L.x1);
+      var lz0 = Math.min(L.z0, L.z1), lz1 = Math.max(L.z0, L.z1);
+      // Expand the thin axis so the beam is a visible vertical ribbon
+      if (lx1 - lx0 < THICK * 2) {
+        var mx = (lx0 + lx1) * 0.5;
+        lx0 = mx - THICK; lx1 = mx + THICK;
       }
-      if (tHit > 0 && (best < 0 || tHit < best)) best = tHit;
+      if (lz1 - lz0 < THICK * 2) {
+        var mz = (lz0 + lz1) * 0.5;
+        lz0 = mz - THICK; lz1 = mz + THICK;
+      }
+      var t0 = 0, t1 = maxDist;
+      // X slab
+      if (Math.abs(dx) > 1e-8) {
+        var tx0 = (lx0 - ox) / dx, tx1 = (lx1 - ox) / dx;
+        if (tx0 > tx1) { var tmpx = tx0; tx0 = tx1; tx1 = tmpx; }
+        t0 = Math.max(t0, tx0); t1 = Math.min(t1, tx1);
+      } else if (ox < lx0 || ox > lx1) continue;
+      // Y slab (floating band)
+      if (Math.abs(dy) > 1e-8) {
+        var ty0 = (L.y0 - oy) / dy, ty1 = (L.y1 - oy) / dy;
+        if (ty0 > ty1) { var tmpy = ty0; ty0 = ty1; ty1 = tmpy; }
+        t0 = Math.max(t0, ty0); t1 = Math.min(t1, ty1);
+      } else if (oy < L.y0 || oy > L.y1) continue;
+      // Z slab
+      if (Math.abs(dz) > 1e-8) {
+        var tz0 = (lz0 - oz) / dz, tz1 = (lz1 - oz) / dz;
+        if (tz0 > tz1) { var tmpz = tz0; tz0 = tz1; tz1 = tmpz; }
+        t0 = Math.max(t0, tz0); t1 = Math.min(t1, tz1);
+      } else if (oz < lz0 || oz > lz1) continue;
+      if (t0 >= t1 || t1 <= 0 || t0 > maxDist) continue;
+      var tm = t0 > 0 ? t0 : t1;
+      if (tm > 0 && tm <= maxDist && (best < 0 || tm < best)) best = tm;
     }
     return best;
   }
