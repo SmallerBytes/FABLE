@@ -122,8 +122,8 @@
       { x0: 20 * CELL + IN, z0: 11.5 * CELL, x1: 29 * CELL - IN, z1: 11.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-MID' },
       // jack-in approach, EW hall west of D3 (cols 26–33)
       { x0: 26 * CELL + IN, z0: 23.5 * CELL, x1: 34 * CELL - IN, z1: 23.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-GEN' },
-      // exit wing EW hall (cols 1–7)
-      { x0: 1 * CELL + IN, z0: 31.5 * CELL, x1: 8 * CELL - IN, z1: 31.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-EXIT' }
+      // exit wing EW choke (cols 1–4; col 5 is a pillar)
+      { x0: 1 * CELL + IN, z0: 31.5 * CELL, x1: 5 * CELL - IN, z1: 31.5 * CELL, y0: 0.85, y1: 1.55, id: 'L-EXIT' }
     ];
 
     // Blast doors — start locked (extra solid cells on approaches to jack-in)
