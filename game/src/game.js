@@ -52,16 +52,17 @@
     try { localStorage.setItem('hollow_gfx', gfxQuality); } catch (err) { void err; }
   }
 
-  // ---- palette (GDD §3.2) ----
-  var C_WALL = [0.486, 1.0, 0.608];
-  var C_FLOOR = [0.18, 0.52, 0.46];
-  var C_CEIL = [0.30, 0.72, 0.42];
-  var C_HARBOR = [0.15, 1.0, 0.35];   // safe-zone LiDAR returns
+  // ---- palette (GDD §3.2) — wall tones kept mid so additive LiDAR does not blow out ----
+  var C_WALL = [0.32, 0.72, 0.42];
+  var C_FLOOR = [0.12, 0.38, 0.34];
+  var C_CEIL = [0.20, 0.50, 0.30];
+  var C_HARBOR = [0.12, 0.78, 0.28];   // safe-zone LiDAR returns
   var C_YELLOW = [1.0, 0.92, 0.12];   // laser alarm beams
   var C_AMBER = [1.0, 0.70, 0.28];
   var C_CYAN = [0.43, 0.91, 0.91];
   var C_RED = [1.0, 0.27, 0.27];
   var C_WHITE = [1.0, 1.0, 1.0];
+  var C_DOOR = [0.12, 0.28, 0.72];   // locked blast doors — dark blue
   var NOISE_LASER = 32;
   var LASER_COOLDOWN = 10;
 
@@ -288,6 +289,25 @@
     $('opt-vol').addEventListener('input', function (e) { A.setVolume(e.target.value / 100); });
     $('opt-flash').addEventListener('change', function (e) { reducedFlash = e.target.checked; });
 
+    function syncSmoothTurnUI(on) {
+      var a = $('opt-smooth'), b = $('opt-smooth-controls');
+      if (a) a.checked = !!on;
+      if (b) b.checked = !!on;
+    }
+    function applySmoothTurn(on) {
+      if (VR && VR.setSmoothTurn) VR.setSmoothTurn(on);
+      syncSmoothTurnUI(on);
+    }
+    var smoothBoot = $('opt-smooth');
+    var smoothCtrl = $('opt-smooth-controls');
+    if (smoothBoot) {
+      smoothBoot.addEventListener('change', function (e) { applySmoothTurn(e.target.checked); });
+    }
+    if (smoothCtrl) {
+      smoothCtrl.addEventListener('change', function (e) { applySmoothTurn(e.target.checked); });
+    }
+    applySmoothTurn(VR && VR.getSmoothTurn ? VR.getSmoothTurn() : false);
+
     var saved = 'medium';
     try { saved = localStorage.getItem('hollow_gfx') || 'medium'; } catch (err) { void err; }
     if (!GFX[saved]) saved = 'medium';
@@ -490,7 +510,7 @@
     var bestT = hit ? hit.t : SCAN_RANGE + 1;
     var color = null, life = POINT_LIFE;
     if (hit) {
-      if (hit.type === 'door') color = C_WHITE;
+      if (hit.type === 'door') color = C_DOOR;
       else if (hit.type === 'floor' && M.isSafeAt(hit.x, hit.z)) color = C_HARBOR;
       else color = hit.type === 'floor' ? C_FLOOR : (hit.type === 'ceil' ? C_CEIL : C_WALL);
     }
@@ -518,12 +538,12 @@
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: memos[i].x, y: 0.7, z: memos[i].z, r: 0.4 });
       if (t > 0 && t < bestT) { bestT = t; color = C_CYAN; life = POINT_LIFE; }
     }
-    // locked blast doors — bright white slab (also fills gaps if ray grazes)
+    // locked blast doors — dark blue slab (also fills gaps if ray grazes)
     for (i = 0; i < M.markers.doors.length; i++) {
       var door = M.markers.doors[i];
       if (!door.locked) continue;
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: door.x, y: 1.3, z: door.z, r: 1.15 });
-      if (t > 0 && t < bestT) { bestT = t; color = C_WHITE; life = POINT_LIFE; }
+      if (t > 0 && t < bestT) { bestT = t; color = C_DOOR; life = POINT_LIFE; }
     }
     if (!uplinkDone) {
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: M.markers.G.x, y: 1.1, z: M.markers.G.z, r: 0.7 });

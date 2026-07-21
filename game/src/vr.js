@@ -11,6 +11,9 @@
   var framebufferScale = 0.8;
   // Raise virtual floor slightly so standing/sitting feels less ground-hugging
   var HEIGHT_BOOST = 0.28;
+  var smoothTurn = false;
+  var SMOOTH_TURN_RATE = 2.35; // rad/s at full stick
+  var lastFrameTime = 0;
   var currentInput = {
     moveX: 0, moveY: 0, heading: 0,
     bodyYaw: 0,
@@ -66,6 +69,7 @@
       referenceSpace = space;
       bodyYaw = 0;
       previousButtons = {};
+      lastFrameTime = 0;
       session.addEventListener('end', onEnd);
       NS.audio.startAmbient();
       NS.game.onVRStart();
@@ -92,7 +96,9 @@
     session.requestAnimationFrame(onFrame);
     var pose = frame.getViewerPose(referenceSpace);
     if (!pose) return;
-    readInput(frame, pose);
+    var dt = lastFrameTime ? Math.min(0.05, (time - lastFrameTime) / 1000) : 0.016;
+    lastFrameTime = time;
+    readInput(frame, pose, dt);
     NS.game.onXRFrame(time, frame, pose, currentInput, bodyYaw);
   }
 
@@ -148,7 +154,7 @@
     return [c * v[0] - s * v[2], v[1], s * v[0] + c * v[2]];
   }
 
-  function readInput(frame, pose) {
+  function readInput(frame, pose, dt) {
     currentInput.moveX = 0;
     currentInput.moveY = 0;
     currentInput.trickle = false;
@@ -158,6 +164,7 @@
     currentInput.aimOrigin = null;
     currentInput.aimDirection = null;
     currentInput.wrist = null;
+    dt = dt || 0.016;
 
     var rightSource = null;
     var leftSource = null;
@@ -172,7 +179,12 @@
         currentInput.sprint = leftSprint(gp);
       } else if (source.handedness === 'right') {
         rightSource = source;
-        if (Math.abs(axes[0]) > 0.75 && !snapLatch) {
+        if (smoothTurn) {
+          if (Math.abs(axes[0]) > 0.18) {
+            bodyYaw += axes[0] * SMOOTH_TURN_RATE * dt;
+          }
+          snapLatch = false;
+        } else if (Math.abs(axes[0]) > 0.75 && !snapLatch) {
           bodyYaw += axes[0] > 0 ? Math.PI / 6 : -Math.PI / 6;
           snapLatch = true;
         } else if (Math.abs(axes[0]) < 0.35) {
@@ -286,6 +298,18 @@
     } catch (e) { void e; }
   }
 
+  function setSmoothTurn(on) {
+    smoothTurn = !!on;
+    snapLatch = false;
+    try { localStorage.setItem('hollow_smooth_turn', smoothTurn ? '1' : '0'); } catch (e) { void e; }
+  }
+
+  function getSmoothTurn() { return smoothTurn; }
+
+  try {
+    smoothTurn = localStorage.getItem('hollow_smooth_turn') === '1';
+  } catch (e) { void e; }
+
   NS.vr = {
     init: init,
     enter: enter,
@@ -295,7 +319,9 @@
     viewsForPose: viewsForPose,
     framebuffer: framebuffer,
     setFramebufferScale: setFramebufferScale,
-    worldYFromXR: worldYFromXR
+    worldYFromXR: worldYFromXR,
+    setSmoothTurn: setSmoothTurn,
+    getSmoothTurn: getSmoothTurn
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));

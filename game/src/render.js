@@ -15,6 +15,13 @@
   var cursor = 0, written = 0;
   var staging = new Float32Array(60000 * STRIDE);
   var stagingCount = 0;
+  // Spatial density gate — stops LiDAR returns stacking into eye-searing white
+  var DENS_BUCKETS = 8192;
+  var densStamp = new Float32Array(DENS_BUCKETS);
+  var densCount = new Uint8Array(DENS_BUCKETS);
+  var DENS_CELL = 0.16;      // metres
+  var DENS_MAX = 2;          // live hits allowed per cell window
+  var DENS_WINDOW = 0.55;    // seconds
 
   function compile(type, src) {
     var s = gl.createShader(type);
@@ -55,7 +62,7 @@
     '  vBright = b;',
     '  vCol = aCol;',
     '  float dist = max(0.5, -vp.z);',
-    '  gl_PointSize = clamp(170.0 / dist, 1.6, 5.0) * (b > 0.0 ? 1.0 : 0.0);',
+    '  gl_PointSize = clamp(140.0 / dist, 1.4, 4.2) * (b > 0.0 ? 1.0 : 0.0);',
     '}'
   ].join('\n');
 
@@ -69,7 +76,7 @@
     '  float r2 = dot(d, d);',
     '  if (r2 > 0.25) discard;',
     '  float soft = 1.0 - smoothstep(0.10, 0.5, sqrt(r2));',
-    '  gl_FragColor = vec4(vCol * vBright * soft, 1.0);',
+    '  gl_FragColor = vec4(vCol * vBright * soft * 0.52, 1.0);',
     '}'
   ].join('\n');
 
@@ -146,7 +153,7 @@
     '          + texture2D(uTex, uv - vec2(px.x * 2.0, 0.0)).rgb',
     '          + texture2D(uTex, uv + vec2(0.0, px.y * 2.0)).rgb',
     '          + texture2D(uTex, uv - vec2(0.0, px.y * 2.0)).rgb;',
-    '  col += nb * 0.12;',                               // bloom approximation
+    '  col += nb * 0.06;',                               // bloom approximation (kept mild)
     '  float scan = 0.88 + 0.12 * sin(uv.y * uRes.y * 3.14159);',
     '  col *= scan;',
     // tape noise: base grain plus interference static
@@ -154,13 +161,16 @@
     '  col += grain;',
     // dropout streaks: a scanline flares white for one frame
     '  float drop = step(0.9994 - uGlitch * 0.004, hash(vec2(floor(uv.y * uRes.y), floor(uTime * 24.0))));',
-    '  col += drop * 0.55;',
+    '  col += drop * 0.35;',
     // torn bands read as raw static, not picture
     '  col = mix(col, vec3(hash(uv * uRes + uTime * 31.0)) * 0.5, band * uGlitch * 0.8);',
-    '  col += hs * hash(uv * uRes + uTime * 53.0) * 0.25;',
+    '  col += hs * hash(uv * uRes + uTime * 53.0) * 0.18;',
     '  float vig = 1.0 - r2 * 1.35;',
     '  col *= max(vig, 0.0);',
     '  col += vec3(0.012, 0.022, 0.014) * max(vig, 0.0);', // faint phosphor base glow
+    // soft-cap stacked LiDAR returns so walls do not blow out to white
+    '  float peak = max(col.r, max(col.g, col.b));',
+    '  col *= 1.05 / (1.0 + peak * 0.85);',
     '  col = mix(col, vec3(0.9, 0.05, 0.05), uFlood);',
     '  gl_FragColor = vec4(col, 1.0);',
     '}'
@@ -277,13 +287,34 @@
     if (canvas) resize();
   }
 
+  function densHash(x, y, z) {
+    var ix = Math.floor(x / DENS_CELL);
+    var iy = Math.floor(y / DENS_CELL);
+    var iz = Math.floor(z / DENS_CELL);
+    var h = ((ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791)) >>> 0;
+    return h % DENS_BUCKETS;
+  }
+
   function addPoint(x, y, z, r, g, b, birth, life) {
     if (stagingCount >= 60000) return;
+    var h = densHash(x, y, z);
+    if (birth - densStamp[h] > DENS_WINDOW) {
+      densStamp[h] = birth;
+      densCount[h] = 0;
+    }
+    if (densCount[h] >= DENS_MAX) return;
+    densCount[h]++;
     var o = stagingCount * STRIDE;
     staging[o] = x; staging[o + 1] = y; staging[o + 2] = z;
     staging[o + 3] = r; staging[o + 4] = g; staging[o + 5] = b;
     staging[o + 6] = birth; staging[o + 7] = life;
     stagingCount++;
+  }
+
+  function clearPoints() {
+    cursor = 0; written = 0; stagingCount = 0;
+    densStamp.fill(0);
+    densCount.fill(0);
   }
 
   function flush() {
@@ -305,10 +336,6 @@
   }
 
   function pointCount() { return Math.min(written, CAPACITY); }
-
-  function clearPoints() {
-    cursor = 0; written = 0; stagingCount = 0;
-  }
 
   function drawPoints(proj, view, now, maxPoints) {
     var n = pointCount();
