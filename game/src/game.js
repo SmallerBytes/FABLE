@@ -172,6 +172,27 @@
     requestAnimationFrame(frame);
   }
 
+  function syncGfxButtons() {
+    var buttons = document.querySelectorAll('.gfx-btn');
+    for (var i = 0; i < buttons.length; i++) {
+      var b = buttons[i];
+      if (b.getAttribute('data-gfx') === gfxQuality) b.classList.add('active');
+      else b.classList.remove('active');
+    }
+  }
+
+  function isMenuControl(el) {
+    if (!el || !el.closest) return false;
+    return !!(el.closest('input, select, textarea, button, label, a, .gfx-row, .opt-row, .menu-actions'));
+  }
+
+  function startDesktop() {
+    A.ensure();
+    A.startAmbient();
+    if (NS.mic) NS.mic.start();
+    el.canvas.requestPointerLock();
+  }
+
   // ------------------------------------------------------------------
   // input
   // ------------------------------------------------------------------
@@ -180,6 +201,7 @@
       keys[e.code] = true;
       if (e.code === 'Enter') {
         if (state === 'BOOT') { finishBoot(); }
+        else if (state === 'CONTROLS') { startDesktop(); }
         else if (state === 'DEAD' || state === 'LEFT') { showScreen('controls'); state = 'CONTROLS'; }
         else if (state === 'WIN') { state = 'BOOT'; startBootType(); }
       }
@@ -210,17 +232,30 @@
       player.pitch = math.clamp(player.pitch, -1.45, 1.45);
     });
 
+    // Controls screen: only explicit buttons start — never click-anywhere
     el.controls.addEventListener('click', function (e) {
-      if (e.target && (e.target.id === 'enter-vr' || (e.target.closest && e.target.closest('a[href*="map-print"]')))) return;
-      A.ensure();
-      A.startAmbient();
-      if (NS.mic) NS.mic.start();
-      el.canvas.requestPointerLock();
+      if (isMenuControl(e.target)) return;
     });
+    var btnDesktop = $('btn-start-desktop');
+    if (btnDesktop) {
+      btnDesktop.addEventListener('click', function (e) {
+        e.stopPropagation();
+        startDesktop();
+      });
+    }
+
+    // Boot screen: ignore option controls; CONTINUE / Enter advances
     el.boot.addEventListener('click', function (e) {
-      if (e.target && e.target.closest && e.target.closest('a[href*="map-print"]')) return;
-      if (state === 'BOOT' && e.target.tagName !== 'INPUT') finishBoot();
+      if (isMenuControl(e.target)) return;
     });
+    var btnBoot = $('btn-boot-continue');
+    if (btnBoot) {
+      btnBoot.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (state === 'BOOT') finishBoot();
+      });
+    }
+
     el.death.addEventListener('click', function () {
       if (state === 'DEAD' || state === 'LEFT') {
         $('death-screen').querySelector('h1').textContent = 'CARRIER LOST';
@@ -249,16 +284,22 @@
     $('opt-sens').addEventListener('input', function (e) { sens = e.target.value * 0.000275; });
     $('opt-vol').addEventListener('input', function (e) { A.setVolume(e.target.value / 100); });
     $('opt-flash').addEventListener('change', function (e) { reducedFlash = e.target.checked; });
-    var gfxEl = $('opt-gfx');
-    if (gfxEl) {
-      var saved = 'medium';
-      try { saved = localStorage.getItem('hollow_gfx') || 'medium'; } catch (e) { void e; }
-      if (!GFX[saved]) saved = 'medium';
-      gfxEl.value = saved;
-      applyGraphics(saved);
-      gfxEl.addEventListener('change', function (e) { applyGraphics(e.target.value); });
-    } else {
-      applyGraphics('medium');
+
+    var saved = 'medium';
+    try { saved = localStorage.getItem('hollow_gfx') || 'medium'; } catch (err) { void err; }
+    if (!GFX[saved]) saved = 'medium';
+    applyGraphics(saved);
+    syncGfxButtons();
+
+    var gfxButtons = document.querySelectorAll('.gfx-btn');
+    for (var gi = 0; gi < gfxButtons.length; gi++) {
+      gfxButtons[gi].addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var level = e.currentTarget.getAttribute('data-gfx');
+        applyGraphics(level);
+        syncGfxButtons();
+      });
     }
   }
 
