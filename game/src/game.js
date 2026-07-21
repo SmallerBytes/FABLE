@@ -641,45 +641,51 @@
     ];
   }
 
-  // Wristlink panel: always faces the player's head so raising the left
-  // controller shows MOTION / STAMINA / SIGNATURE clearly (Pip-Boy style).
+  // Pip-Boy panel fixed to left controller orientation (raise wrist to read).
   function buildWristModel(wrist, bodyYaw) {
     var c = Math.cos(bodyYaw || 0), s = Math.sin(bodyYaw || 0);
-    var gx, gy, gz;
+    var gx, gy, gz, qx, qy, qz, qw;
     if (wrist) {
       gx = player.x + c * wrist.localX - s * wrist.localZ;
       gy = (VR && VR.worldYFromXR) ? VR.worldYFromXR(wrist.y) : wrist.y;
       gz = player.z + s * wrist.localX + c * wrist.localZ;
+      qx = wrist.qx; qy = wrist.qy; qz = wrist.qz; qw = wrist.qw;
     } else {
-      // Fallback if grip pose drops: float panel at left-front torso
+      // Fallback if grip pose drops: left-front torso, upright
       gx = player.x - c * 0.22 - s * 0.18;
       gy = player.eye - 0.25;
       gz = player.z + s * 0.22 - c * 0.18;
+      qx = 0; qy = 0; qz = 0; qw = 1;
     }
 
-    var hx = player.x, hy = player.eye, hz = player.z;
-    var tx = hx - gx, ty = hy - gy, tz = hz - gz;
-    var td = Math.sqrt(tx * tx + ty * ty + tz * tz);
-    if (td < 0.05) { tx = 0; ty = 0; tz = -1; td = 1; }
-    var nx = tx / td, ny = ty / td, nz = tz / td;
-
-    // sit a few cm toward the eyes so it clears the controller body
-    var px = gx + nx * 0.12;
-    var py = gy + ny * 0.12 + 0.02;
-    var pz = gz + nz * 0.12;
-
-    var right = math.vnorm(math.vcross([0, 1, 0], [nx, ny, nz]));
-    if (Math.abs(right[0]) + Math.abs(right[1]) + Math.abs(right[2]) < 0.05) {
-      right = [1, 0, 0];
+    function axis(lx, ly, lz) {
+      var v = quatMulVec(qx, qy, qz, qw, lx, ly, lz);
+      return [c * v[0] - s * v[2], v[1], s * v[0] + c * v[2]];
     }
-    var up = math.vnorm(math.vcross([nx, ny, nz], right));
-    right = math.vnorm(math.vcross(up, [nx, ny, nz]));
 
-    var sx = 0.30, sy = 0.19; // metres — easy to read when raised
+    var right = math.vnorm(axis(1, 0, 0));
+    var up0 = axis(0, 1, 0);
+    var fwd = axis(0, 0, -1);
+    // tilt panel toward the eyes (~55°)
+    var tilt = 0.96;
+    var ct = Math.cos(tilt), st = Math.sin(tilt);
+    var up = math.vnorm([
+      up0[0] * ct + fwd[0] * st,
+      up0[1] * ct + fwd[1] * st,
+      up0[2] * ct + fwd[2] * st
+    ]);
+    var normal = math.vnorm(math.vcross(right, up));
+    right = math.vnorm(math.vcross(up, normal));
+
+    // sit on top/inner face of left controller
+    var off = axis(0.0, 0.045, 0.055);
+    var px = gx + off[0], py = gy + off[1], pz = gz + off[2];
+
+    var sx = 0.22, sy = 0.14;
     var m = new Float32Array(16);
     m[0] = right[0] * sx; m[1] = right[1] * sx; m[2] = right[2] * sx; m[3] = 0;
     m[4] = up[0] * sy; m[5] = up[1] * sy; m[6] = up[2] * sy; m[7] = 0;
-    m[8] = nx; m[9] = ny; m[10] = nz; m[11] = 0;
+    m[8] = normal[0]; m[9] = normal[1]; m[10] = normal[2]; m[11] = 0;
     m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
     return m;
   }

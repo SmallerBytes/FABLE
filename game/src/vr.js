@@ -105,24 +105,17 @@
     return [Math.abs(x) > dead ? x : 0, Math.abs(y) > dead ? y : 0];
   }
 
-  function stickMag(gamepad) {
-    var a = axesFor(gamepad);
-    return Math.sqrt(a[0] * a[0] + a[1] * a[1]);
-  }
-
   function pressed(gamepad, index) {
     if (!gamepad || !gamepad.buttons || !gamepad.buttons[index]) return false;
     var b = gamepad.buttons[index];
     return !!(b.pressed || b.value > 0.45);
   }
 
-  // Quest Browser is inconsistent about thumbstick-click index; also accept
-  // left grip and full stick deflection (push to run).
+  // Hold to sprint only — never auto-run from stick travel.
+  // Left grip is primary (reliable on Quest); stick-click is secondary.
   function leftSprint(gp) {
     if (!gp) return false;
-    if (pressed(gp, 1)) return true;          // grip
-    if (pressed(gp, 3) || pressed(gp, 2)) return true; // stick click (varies)
-    return stickMag(gp) >= 0.88;              // push stick fully
+    return pressed(gp, 1) || pressed(gp, 3) || pressed(gp, 2);
   }
 
   function interactRising(id, gp, isLeft) {
