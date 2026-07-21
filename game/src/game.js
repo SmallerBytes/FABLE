@@ -406,7 +406,8 @@
     var bestT = hit ? hit.t : SCAN_RANGE + 1;
     var color = null, life = POINT_LIFE;
     if (hit) {
-      if (hit.type === 'floor' && M.isSafeAt(hit.x, hit.z)) color = C_HARBOR;
+      if (hit.type === 'door') color = C_WHITE;
+      else if (hit.type === 'floor' && M.isSafeAt(hit.x, hit.z)) color = C_HARBOR;
       else color = hit.type === 'floor' ? C_FLOOR : (hit.type === 'ceil' ? C_CEIL : C_WALL);
     }
 
@@ -433,12 +434,12 @@
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: memos[i].x, y: 0.7, z: memos[i].z, r: 0.4 });
       if (t > 0 && t < bestT) { bestT = t; color = C_CYAN; life = POINT_LIFE; }
     }
-    // locked blast doors
+    // locked blast doors — bright white slab (also fills gaps if ray grazes)
     for (i = 0; i < M.markers.doors.length; i++) {
       var door = M.markers.doors[i];
       if (!door.locked) continue;
-      t = raySphere(ox, oy, oz, dx, dy, dz, { x: door.x, y: 1.2, z: door.z, r: 0.85 });
-      if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
+      t = raySphere(ox, oy, oz, dx, dy, dz, { x: door.x, y: 1.3, z: door.z, r: 1.15 });
+      if (t > 0 && t < bestT) { bestT = t; color = C_WHITE; life = POINT_LIFE; }
     }
     if (!uplinkDone) {
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: M.markers.G.x, y: 1.1, z: M.markers.G.z, r: 0.7 });

@@ -180,7 +180,7 @@
 
   // ---------------------------------------------------------------
   // Raycast: analytic floor/ceiling planes + 2D DDA through wall cells.
-  // Returns { t, x, y, z, type } with type in 'wall' | 'floor' | 'ceil',
+  // Returns { t, x, y, z, type } with type in 'wall' | 'door' | 'floor' | 'ceil',
   // or null if nothing within maxDist.
   // ---------------------------------------------------------------
   function raycast(ox, oy, oz, dx, dy, dz, maxDist) {
@@ -197,7 +197,7 @@
     // 2D DDA over (x,z)
     var cx = Math.floor(ox / CELL), cz = Math.floor(oz / CELL);
     if (isSolidCell(cx, cz)) {
-      return { t: 0, x: ox, y: oy, z: oz, type: 'wall' };
+      return { t: 0, x: ox, y: oy, z: oz, type: isDoorSolid(cx, cz) ? 'door' : 'wall' };
     }
     var adx = Math.abs(dx), adz = Math.abs(dz);
     if (adx > 1e-9 || adz > 1e-9) {
@@ -214,7 +214,8 @@
         else { t = tMaxZ; tMaxZ += tDeltaZ; cz += stepZ; }
         if (t >= best) break;
         if (isSolidCell(cx, cz)) {
-          best = t; type = 'wall';
+          best = t;
+          type = isDoorSolid(cx, cz) ? 'door' : 'wall';
           break;
         }
       }
