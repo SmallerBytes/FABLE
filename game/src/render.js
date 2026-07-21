@@ -479,20 +479,20 @@
     ctx.fillRect(bx2 + 2, by3 + 2, Math.max(0, (bw2 - 4) * sta), bh2 - 4);
 
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(28, h - 100, w - 56, 72);
-    ctx.strokeStyle = 'rgba(255,179,71,0.55)';
-    ctx.strokeRect(28, h - 100, w - 56, 72);
+    ctx.fillRect(28, h - 72, w - 56, 48);
+    ctx.strokeStyle = 'rgba(255,179,71,0.45)';
+    ctx.strokeRect(28, h - 72, w - 56, 48);
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255,179,71,0.98)';
-    ctx.font = 'bold 26px Consolas, monospace';
+    ctx.fillStyle = 'rgba(255,179,71,0.9)';
+    ctx.font = '13px Consolas, monospace';
     var hint = hudState.hint || 'RAISE WRIST · TRACK SECURITY';
-    if (hint.length > 36) {
-      var mid = hint.lastIndexOf(' ', 36);
-      if (mid < 12) mid = 36;
-      ctx.fillText(hint.slice(0, mid), w * 0.5, h - 70);
-      ctx.fillText(hint.slice(mid).trim(), w * 0.5, h - 42);
+    if (hint.length > 42) {
+      var mid = hint.lastIndexOf(' ', 42);
+      if (mid < 14) mid = 42;
+      ctx.fillText(hint.slice(0, mid), w * 0.5, h - 52);
+      ctx.fillText(hint.slice(mid).trim(), w * 0.5, h - 36);
     } else {
-      ctx.fillText(hint, w * 0.5, h - 56);
+      ctx.fillText(hint, w * 0.5, h - 44);
     }
     hudDirty = false;
   }
