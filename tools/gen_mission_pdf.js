@@ -47,7 +47,7 @@ var body = [
   'BLAST DOORS: ' + doorLine,
   'TRIPWIRES (T): ' + tripLine,
   'INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.',
-  'Minimize emissions. One Faraday harbor west of infil dampens signature. Two security units.',
+  'Minimize emissions. One Faraday harbor in the start/infil room dampens signature. Two security units.',
   '',
   'LEGEND: # wall  . floor  S harbor  P START  D blast door  T tripwire  1-3 keys  G jack-in  X LZ  m intel  C security',
   ''

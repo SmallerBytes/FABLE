@@ -2,7 +2,7 @@
 1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj
 2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj
 3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj
-4 0 obj<< /Length 2956 >>stream
+4 0 obj<< /Length 2966 >>stream
 BT
 /F1 6 Tf
 36 780 Td
@@ -14,7 +14,7 @@ T* (START / INFIL: grid col 10, row 23  \(ASCII character P\)) Tj
 T* (BLAST DOORS: D1@17,10  D2@26,27  D3@34,23) Tj
 T* (TRIPWIRES \(T\): L-STORAGE@3,10  L-LAB@18,6  L-MID@15,15  L-GEN@31,23  L-EXIT@5,34) Tj
 T* (INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.) Tj
-T* (Minimize emissions. One Faraday harbor west of infil dampens signature. Two security units.) Tj
+T* (Minimize emissions. One Faraday harbor in the start/infil room dampens signature. Two security units.) Tj
 T* () Tj
 T* (LEGEND: # wall  . floor  S harbor  P START  D blast door  T tripwire  1-3 keys  G jack-in  X LZ  m intel  C security) Tj
 T* () Tj
@@ -38,12 +38,12 @@ T* (#...#..#..##..##....#.........#..##..##..##....#) Tj
 T* (#...#......##..##...#....#######...............#) Tj
 T* (#...#..#............#....#.....#..############.#) Tj
 T* (#...#..#############.....#.....#...............#) Tj
-T* (#SSSSS.#............#....#.....#..#########....#) Tj
-T* (#SSSSS.#............#....#.....#..#.......#....#) Tj
-T* (#..##..#............#....#.....#..#.......#....#) Tj
-T* (#..##.....P.........#....#.....T..D.....G.#....#) Tj
-T* (#......#............#....#.....#..#.......#....#) Tj
-T* (#......#............#....#.....#..#########....#) Tj
+T* (#......#SSSSSSSSSSSS#....#.....#..#########....#) Tj
+T* (#......#SSSSSSSSSSSS#....#.....#..#.......#....#) Tj
+T* (#..##..#SSSSSSSSSSSS#....#.....#..#.......#....#) Tj
+T* (#..##...SSPSSSSSSSSS#....#.....T..D.....G.#....#) Tj
+T* (#......#SSSSSSSSSSSS#....#.....#..#.......#....#) Tj
+T* (#......#SSSSSSSSSSSS#....#.....#..#########....#) Tj
 T* (######.##....########....##..###...............#) Tj
 T* (#....#.......#............D.............####...#) Tj
 T* (#....#..######..######....######..#####....#...#) Tj
@@ -69,8 +69,8 @@ xref
 0000000056 00000 n 
 0000000111 00000 n 
 0000000235 00000 n 
-0000003241 00000 n 
+0000003251 00000 n 
 trailer<< /Size 6 /Root 1 0 R >>
 startxref
-3307
+3317
 %%EOF

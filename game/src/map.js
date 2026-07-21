@@ -98,9 +98,10 @@
       grid.push(row);
       safe.push(srow);
     }
-    // One Faraday sanctuary room (west alcove near infil)
-    placeSafe(1, 20); placeSafe(2, 20); placeSafe(3, 20); placeSafe(4, 20); placeSafe(5, 20);
-    placeSafe(1, 21); placeSafe(2, 21); placeSafe(3, 21); placeSafe(4, 21); placeSafe(5, 21);
+    // One Faraday sanctuary = the spawn / infil room (around P)
+    for (var sr = 20; sr <= 25; sr++) {
+      for (var sc = 8; sc <= 19; sc++) placeSafe(sc, sr);
+    }
 
     // Yellow tripwires — single ankle-height beams across hallway / entrance chokes.
     // Endpoints sit just inside wall faces; y band is thin so LiDAR paints one line.
