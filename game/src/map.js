@@ -98,17 +98,9 @@
       grid.push(row);
       safe.push(srow);
     }
-    // Place acoustic harbors by cell (floor remains walkable)
-    placeSafe(7, 23);   // atrium west of spawn
-    placeSafe(6, 23);
-    placeSafe(4, 13);   // storage near fuse 1
-    placeSafe(5, 13);
-    placeSafe(22, 13);  // mid corridor / memo area
-    placeSafe(23, 13);
-    placeSafe(38, 22);  // generator approach
-    placeSafe(39, 22);
-    placeSafe(3, 33);   // pre-exit corridor
-    placeSafe(4, 33);
+    // One Faraday sanctuary room (west alcove near infil)
+    placeSafe(1, 20); placeSafe(2, 20); placeSafe(3, 20); placeSafe(4, 20); placeSafe(5, 20);
+    placeSafe(1, 21); placeSafe(2, 21); placeSafe(3, 21); placeSafe(4, 21); placeSafe(5, 21);
 
     // Yellow tripwires — single ankle-height beams across hallway / entrance chokes.
     // Endpoints sit just inside wall faces; y band is thin so LiDAR paints one line.

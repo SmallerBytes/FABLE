@@ -47,13 +47,13 @@ var body = [
   'BLAST DOORS: ' + doorLine,
   'TRIPWIRES (T): ' + tripLine,
   'INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.',
-  'Minimize emissions. Faraday harbors (S) dampen signature.',
+  'Minimize emissions. One Faraday harbor west of infil dampens signature. Two security units.',
   '',
   'LEGEND: # wall  . floor  S harbor  P START  D blast door  T tripwire  1-3 keys  G jack-in  X LZ  m intel  C security',
   ''
 ].concat(rows).concat([
   '',
-  'Operator=VR. Mission Director=this map + voice.',
+  'Operator=VR. Mission Director=this map + voice. Wristlink = motion tracker.',
   'After uplink: inbound then on-station window. Miss LZ = left behind.',
   'Full-color diagram: open game/map-print.html → Print → Save as PDF.'
 ]);

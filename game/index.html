@@ -36,6 +36,9 @@
   #aux-bar{ height:6px; border:1px solid var(--ph-dim); margin-top:4px; position:relative; overflow:hidden; }
   #aux-fill{ position:absolute; left:0; top:0; bottom:0; width:0%; background:var(--ph); box-shadow:0 0 8px var(--ph); transition:width .12s linear; }
   #aux-tick{ position:absolute; top:-12px; font-size:10px; color:var(--red); text-shadow:0 0 6px var(--red); opacity:0; }
+  #sta{ position:absolute; bottom:52px; left:50%; transform:translateX(-50%); width:220px; text-align:center; font-size:11px; }
+  #sta-bar{ height:6px; border:1px solid var(--ph-dim); margin-top:4px; position:relative; overflow:hidden; }
+  #sta-fill{ position:absolute; left:0; top:0; bottom:0; width:100%; background:#78c8ff; box-shadow:0 0 8px #78c8ff; transition:width .12s linear; }
   #eventline{
     position:absolute; top:58px; left:50%; transform:translateX(-50%);
     max-width:72%; text-align:center; font-size:14px; line-height:1.7;
@@ -117,6 +120,7 @@
   <div class="hud-corner" id="hud-tr"><span id="hud-pts">PTS 000000 / 700000</span></div>
   <div class="hud-corner" id="hud-bl">CHG <span id="hud-chg">&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;&#9646;</span></div>
   <div class="hud-corner" id="hud-br"><span id="hud-obj">KEY 0/3</span></div>
+  <div id="sta">STAMINA<div id="sta-bar"><div id="sta-fill"></div></div></div>
   <div id="aux">AUX EMISSION<div id="aux-bar"><div id="aux-fill"></div></div><div id="aux-tick">&#9650;</div></div>
   <div id="eventline"></div>
   <div id="reticle"></div>
@@ -158,7 +162,7 @@
   HOLD LMB ......... TRICKLE SCAN          <span class="dim">(QUIET, NARROW)</span>
   RMB / SPACE ...... BURST SWEEP           <span class="red">(LOUD. SECURITY HEARS.)</span>
   W A S D .......... MOVE
-  SHIFT ............ SPRINT                <span class="red">(LOUD)</span>
+  SHIFT ............ SPRINT (FASTER THAN SECURITY) <span class="red">(LOUD · DRAINS STAMINA)</span>
   CTRL ............. CROUCH                <span class="dim">(NEAR-SILENT)</span>
   E ................ INTERACT / ROTATE TILE
 
@@ -167,13 +171,15 @@
              OPTIONAL BLAST DOORS = SHORTCUTS (1 KEY EACH)
              AFTER UPLINK: REACH FLASHING LZ BEFORE CHOPPER DEPARTS
 
-  <span style="color:#0f0">HARBOR GREEN</span> = FARADAY SHELTER
+  <span style="color:#0f0">HARBOR GREEN</span> = ONE FARADAY SAFE ROOM (WEST OF INFIL)
   <span class="amber">YELLOW</span> = TRIPWIRE ALARM
   <span style="color:#fff">WHITE</span> = BLAST DOORS
   <span style="color:#fff">WHITE FLASH LZ</span> = CHOPPER PAD (ON STATION ONLY)
 
   <span class="red">RED RETURNS = SECURITY. DO NOT ENGAGE.</span>
-  <span class="dim">MIC / VOICE RAISES SIGNATURE. PLAN IN HARBORS.</span></pre>
+  <span class="dim">MIC / VOICE RAISES SIGNATURE. ONE HARBOR = ONLY SAFE ROOM. TWO SECURITY UNITS.</span>
+  <span class="dim">VR SPRINT: PUSH LEFT STICK FULLY, OR HOLD LEFT GRIP. LOUD + STAMINA.</span>
+  <span class="dim">RAISE LEFT CONTROLLER TO FACE — WRISTLINK SHOWS MOTION + STAMINA.</span></pre>
     <div class="gfx-row">
       <div class="dim" style="margin-bottom:6px">GRAPHICS</div>
       <button type="button" class="gfx-btn" data-gfx="low">LOW</button>
@@ -184,7 +190,7 @@
       <button type="button" class="menu-btn primary" id="btn-start-desktop">START DESKTOP</button>
       <button id="enter-vr" type="button" class="menu-btn" disabled>CHECKING WEBXR...</button>
     </div>
-    <div id="vr-note">QUEST: SET GRAPHICS ABOVE · TAP ENTER VR · LEFT STICK MOVE · RIGHT SNAP TURN · TRIGGER SCAN · GRIP BURST · A/X INTERACT · LEFT WRIST = WRISTLINK</div>
+    <div id="vr-note">QUEST: PUSH LEFT STICK FULLY OR HOLD LEFT GRIP = SPRINT · RAISE LEFT HAND TO SEE WRISTLINK (MOTION + STAMINA) · RIGHT SNAP TURN · TRIGGER SCAN · GRIP BURST · A/X INTERACT</div>
     <p style="margin-top:18px">
       <a href="map-print.html?v=22" target="_blank" rel="noopener"
          style="color:#7cff9b;border:1px solid #7cff9b;padding:8px 14px;text-decoration:none;display:inline-block;pointer-events:auto;margin:4px">
@@ -212,14 +218,14 @@
 
 <div id="crt-frame"></div>
 
-<script src="src/math.js?v=29"></script>
-<script src="src/map.js?v=29"></script>
-<script src="src/render.js?v=29"></script>
-<script src="src/audio.js?v=29"></script>
-<script src="src/mic.js?v=29"></script>
-<script src="src/enemy.js?v=29"></script>
-<script src="src/circuit.js?v=29"></script>
-<script src="src/vr.js?v=29"></script>
-<script src="src/game.js?v=29"></script>
+<script src="src/math.js?v=32"></script>
+<script src="src/map.js?v=32"></script>
+<script src="src/render.js?v=32"></script>
+<script src="src/audio.js?v=32"></script>
+<script src="src/mic.js?v=32"></script>
+<script src="src/enemy.js?v=32"></script>
+<script src="src/circuit.js?v=32"></script>
+<script src="src/vr.js?v=32"></script>
+<script src="src/game.js?v=32"></script>
 </body>
 </html>

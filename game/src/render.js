@@ -87,8 +87,8 @@
     'uniform sampler2D uTex;',
     'void main(){',
     '  vec4 c = texture2D(uTex, vUv);',
-    '  if (c.a < 0.05) discard;',
-    '  gl_FragColor = c;',
+    '  if (c.a < 0.02) discard;',
+    '  gl_FragColor = vec4(c.rgb, 1.0);',
     '}'
   ].join('\n');
 
@@ -169,7 +169,7 @@
   var attrs = {}, unis = {}, postAttrs = {}, postUnis = {};
   var hudProg = null, hudAttrs = {}, hudUnis = {};
   var hudCanvas = null, hudCtx = null, hudTex = null, hudVbo = null;
-  var hudState = { hint: '', obj: '', aux: 0, timer: '', chg: '' };
+  var hudState = { hint: '', obj: '', aux: 0, stamina: 1, exhausted: false, timer: '', chg: '', contacts: [], yaw: 0, px: 0, pz: 0 };
   var hudDirty = true;
   var wristModel = null; // Float32Array(16) game-world model matrix
 
@@ -379,14 +379,13 @@
     gl.disableVertexAttribArray(postAttrs.aPos);
   }
 
-  // WebXR: wristlink panel in game world (stereo-correct, look at left controller)
+  // WebXR: wristlink panel — status + Alien Isolation–style motion tracker
   function paintHud() {
     if (!hudCtx) return;
     var ctx = hudCtx;
     var w = hudCanvas.width, h = hudCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    // chassis
     ctx.fillStyle = 'rgba(4, 18, 10, 0.92)';
     ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = 'rgba(124,255,155,0.85)';
@@ -399,69 +398,121 @@
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(124,255,155,0.98)';
-    ctx.font = 'bold 28px Consolas, monospace';
-    ctx.fillText('RD-9 WRISTLINK', 36, 48);
-    ctx.font = '22px Consolas, monospace';
+    ctx.font = 'bold 26px Consolas, monospace';
+    ctx.fillText('RD-9 WRISTLINK', 36, 40);
+    ctx.font = '20px Consolas, monospace';
     ctx.fillStyle = 'rgba(124,255,155,0.7)';
-    ctx.fillText(hudState.timer || 'T+00:00', 36, 84);
+    ctx.fillText(hudState.timer || 'T+00:00', 36, 70);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(124,255,155,0.98)';
-    ctx.font = 'bold 26px Consolas, monospace';
-    ctx.fillText(hudState.obj || '', w - 36, 48);
-    ctx.font = '22px Consolas, monospace';
+    ctx.font = 'bold 22px Consolas, monospace';
+    ctx.fillText(hudState.obj || '', w - 36, 40);
+    ctx.font = '18px Consolas, monospace';
     ctx.fillStyle = 'rgba(124,255,155,0.75)';
-    ctx.fillText('CHG ' + (hudState.chg || ''), w - 36, 84);
+    ctx.fillText('CHG ' + (hudState.chg || ''), w - 36, 70);
 
-    // audio / signature bar
+    var cx = w * 0.32, cy = h * 0.52, rad = Math.min(w, h) * 0.22;
+    ctx.strokeStyle = 'rgba(124,255,155,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, rad * 0.55, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - rad, cy); ctx.lineTo(cx + rad, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - rad); ctx.lineTo(cx, cy + rad); ctx.stroke();
+    ctx.fillStyle = 'rgba(124,255,155,0.95)';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 10);
+    ctx.lineTo(cx - 7, cy + 8);
+    ctx.lineTo(cx + 7, cy + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.font = '16px Consolas, monospace';
+    ctx.fillStyle = 'rgba(124,255,155,0.7)';
+    ctx.fillText('MOTION', cx, cy + rad + 18);
+
+    var contacts = hudState.contacts || [];
+    var yaw = hudState.yaw || 0;
+    var rangeM = 42;
+    var pulse = 0.65 + 0.35 * Math.sin(Date.now() * 0.008);
+    for (var i = 0; i < contacts.length; i++) {
+      var c = contacts[i];
+      if (!c) continue;
+      var dx = c.x - (hudState.px || 0);
+      var dz = c.z - (hudState.pz || 0);
+      var dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > rangeM) continue;
+      var bearing = Math.atan2(dx, -dz) - yaw;
+      var r = (dist / rangeM) * rad;
+      var bx = cx + Math.sin(bearing) * r;
+      var by = cy - Math.cos(bearing) * r;
+      var chasing = c.state === 'CHASE';
+      var dormant = c.state === 'DORMANT';
+      ctx.fillStyle = chasing
+        ? 'rgba(255,70,70,' + pulse + ')'
+        : (dormant ? 'rgba(124,255,155,0.35)' : 'rgba(255,200,80,' + pulse + ')');
+      ctx.beginPath();
+      ctx.arc(bx, by, chasing ? 7 : (dormant ? 3.5 : 5), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     var aux = Math.max(0, Math.min(1, hudState.aux || 0));
-    var bx = 36, by = 120, bw = w - 72, bh = 28;
+    var bx2 = w * 0.58, by2 = 110, bw2 = w * 0.36, bh2 = 22;
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(124,255,155,0.85)';
-    ctx.font = 'bold 20px Consolas, monospace';
-    ctx.fillText('AUDIO / SIGNATURE', bx, by - 14);
+    ctx.font = 'bold 18px Consolas, monospace';
+    ctx.fillText('SIGNATURE', bx2, by2 - 12);
     ctx.strokeStyle = 'rgba(63,138,85,0.95)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(bx, by, bw, bh);
+    ctx.strokeRect(bx2, by2, bw2, bh2);
     ctx.fillStyle = aux > 0.55 ? 'rgba(255,80,80,0.95)' : 'rgba(124,255,155,0.95)';
-    ctx.fillRect(bx + 3, by + 3, Math.max(0, (bw - 6) * aux), bh - 6);
+    ctx.fillRect(bx2 + 2, by2 + 2, Math.max(0, (bw2 - 4) * aux), bh2 - 4);
 
-    // prompt band
+    var sta = Math.max(0, Math.min(1, hudState.stamina == null ? 1 : hudState.stamina));
+    var by3 = by2 + 48;
+    ctx.fillStyle = 'rgba(124,255,155,0.85)';
+    ctx.fillText('STAMINA', bx2, by3 - 12);
+    ctx.strokeStyle = 'rgba(63,138,85,0.95)';
+    ctx.strokeRect(bx2, by3, bw2, bh2);
+    ctx.fillStyle = hudState.exhausted
+      ? 'rgba(255,80,80,0.95)'
+      : (sta < 0.3 ? 'rgba(255,179,71,0.95)' : 'rgba(120,200,255,0.95)');
+    ctx.fillRect(bx2 + 2, by3 + 2, Math.max(0, (bw2 - 4) * sta), bh2 - 4);
+
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(28, h - 130, w - 56, 96);
+    ctx.fillRect(28, h - 100, w - 56, 72);
     ctx.strokeStyle = 'rgba(255,179,71,0.55)';
-    ctx.strokeRect(28, h - 130, w - 56, 96);
+    ctx.strokeRect(28, h - 100, w - 56, 72);
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,179,71,0.98)';
-    ctx.font = 'bold 30px Consolas, monospace';
-    var hint = hudState.hint || 'RAISE LEFT WRIST · CHECK STATUS';
-    // wrap long hints
-    if (hint.length > 34) {
-      var mid = hint.lastIndexOf(' ', 34);
-      if (mid < 12) mid = 34;
-      ctx.fillText(hint.slice(0, mid), w * 0.5, h - 92);
-      ctx.fillText(hint.slice(mid).trim(), w * 0.5, h - 56);
+    ctx.font = 'bold 26px Consolas, monospace';
+    var hint = hudState.hint || 'RAISE WRIST · TRACK SECURITY';
+    if (hint.length > 36) {
+      var mid = hint.lastIndexOf(' ', 36);
+      if (mid < 12) mid = 36;
+      ctx.fillText(hint.slice(0, mid), w * 0.5, h - 70);
+      ctx.fillText(hint.slice(mid).trim(), w * 0.5, h - 42);
     } else {
-      ctx.fillText(hint, w * 0.5, h - 74);
+      ctx.fillText(hint, w * 0.5, h - 56);
     }
     hudDirty = false;
   }
 
   function setVRHud(state) {
     if (!state) return;
-    var next = {
+    hudState = {
       hint: state.hint || '',
       obj: state.obj || '',
       aux: state.aux || 0,
+      stamina: state.stamina == null ? 1 : state.stamina,
+      exhausted: !!state.exhausted,
       timer: state.timer || '',
-      chg: state.chg || ''
+      chg: state.chg || '',
+      contacts: state.contacts || [],
+      yaw: state.yaw || 0,
+      px: state.px || 0,
+      pz: state.pz || 0
     };
-    if (next.hint !== hudState.hint || next.obj !== hudState.obj ||
-        next.timer !== hudState.timer || next.chg !== hudState.chg ||
-        Math.abs(next.aux - hudState.aux) > 0.02) {
-      hudDirty = true;
-    }
-    hudState = next;
+    hudDirty = true;
   }
 
   function setWristModel(m) {
@@ -470,15 +521,16 @@
 
   function drawVRHud(proj, view) {
     if (!hudProg || !hudTex || !wristModel) return;
-    if (hudDirty) {
-      paintHud();
-      gl.bindTexture(gl.TEXTURE_2D, hudTex);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hudCanvas);
-    }
+    // Always repaint — radar pulse + stamina need live updates
+    paintHud();
+    gl.bindTexture(gl.TEXTURE_2D, hudTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hudCanvas);
     var math = NS.math;
     var mvp = math.mat4Multiply(proj, math.mat4Multiply(view, wristModel));
     gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(hudProg);

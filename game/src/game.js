@@ -6,9 +6,10 @@
 
   // ---- tuning constants (GDD §3) ----
   var EYE_STAND = 1.85, EYE_CROUCH = 1.15;
-  var SPEED_WALK = 3.2, SPEED_SPRINT = 5.6, SPEED_CROUCH = 1.6;
+  var SPEED_WALK = 3.2, SPEED_SPRINT = 7.4, SPEED_CROUCH = 1.6; // sprint > chase (6.0)
   var PLAYER_RADIUS = 0.35;
-  var NOISE_CROUCH = 2, NOISE_WALK = 7, NOISE_SPRINT = 16;
+  var NOISE_CROUCH = 2, NOISE_WALK = 7, NOISE_SPRINT = 22;
+  var STAMINA_MAX = 1, STAMINA_DRAIN = 0.32, STAMINA_RECOVER = 0.24, STAMINA_MIN_SPRINT = 0.12;
   var NOISE_TRICKLE = 9, NOISE_BURST = 34, NOISE_INTERACT = 12;
   var TRICKLE_RAYS = 220, TRICKLE_CONE = 14 * Math.PI / 180;
   var BURST_TIME = 1.4, BURST_COOLDOWN = 6.0;
@@ -131,6 +132,7 @@
   var exfilTimer = 0;
   var beaconTimer = 0;
   var auxLoud = 0, recentLoud = 0;
+  var stamina = STAMINA_MAX, staminaExhausted = false;
   var tearTimer = 0, floodLevel = 0, dieTimer = 0;
   var glitchLevel = 0, glitchPop = 0, popTimer = 5;
   var runTime = 0;
@@ -157,6 +159,7 @@
     el.hud = $('hud');
     el.timer = $('hud-timer'); el.pts = $('hud-pts'); el.chg = $('hud-chg'); el.obj = $('hud-obj');
     el.auxFill = $('aux-fill'); el.auxTick = $('aux-tick');
+    el.staFill = $('sta-fill');
     el.vcrClock = $('vcr-clock');
     el.eventline = $('eventline');
     el.boot = $('boot-screen'); el.bootText = $('boot-text'); el.bootCont = $('boot-continue');
@@ -366,6 +369,7 @@
     exfilPhase = 'NONE'; exfilTimer = 0;
     burst.active = false; burst.t = 0; burst.cooldown = 0;
     trickleOn = false; auxLoud = 0; recentLoud = 0;
+    stamina = STAMINA_MAX; staminaExhausted = false;
     floodLevel = 0; runTime = 0; deathCause = 'quiet';
     glitchLevel = 0; glitchPop = 0; popTimer = 5;
     laserCooldown = {};
@@ -637,43 +641,45 @@
     ];
   }
 
-  // Pip-Boy / watch panel fixed to left controller (game-world model matrix)
+  // Wristlink panel: always faces the player's head so raising the left
+  // controller shows MOTION / STAMINA / SIGNATURE clearly (Pip-Boy style).
   function buildWristModel(wrist, bodyYaw) {
-    if (!wrist) return null;
-    var c = Math.cos(bodyYaw), s = Math.sin(bodyYaw);
-    var gx = player.x + c * wrist.localX - s * wrist.localZ;
-    var gy = (VR && VR.worldYFromXR) ? VR.worldYFromXR(wrist.y) : wrist.y;
-    var gz = player.z + s * wrist.localX + c * wrist.localZ;
-
-    function axis(lx, ly, lz) {
-      var v = quatMulVec(wrist.qx, wrist.qy, wrist.qz, wrist.qw, lx, ly, lz);
-      return [c * v[0] - s * v[2], v[1], s * v[0] + c * v[2]];
+    var c = Math.cos(bodyYaw || 0), s = Math.sin(bodyYaw || 0);
+    var gx, gy, gz;
+    if (wrist) {
+      gx = player.x + c * wrist.localX - s * wrist.localZ;
+      gy = (VR && VR.worldYFromXR) ? VR.worldYFromXR(wrist.y) : wrist.y;
+      gz = player.z + s * wrist.localX + c * wrist.localZ;
+    } else {
+      // Fallback if grip pose drops: float panel at left-front torso
+      gx = player.x - c * 0.22 - s * 0.18;
+      gy = player.eye - 0.25;
+      gz = player.z + s * 0.22 - c * 0.18;
     }
 
-    var right = math.vnorm(axis(1, 0, 0));
-    var up0 = axis(0, 1, 0);
-    var fwd = axis(0, 0, -1);
-    // tilt panel toward the eyes (~55°)
-    var tilt = 0.96;
-    var ct = Math.cos(tilt), st = Math.sin(tilt);
-    var up = math.vnorm([
-      up0[0] * ct + fwd[0] * st,
-      up0[1] * ct + fwd[1] * st,
-      up0[2] * ct + fwd[2] * st
-    ]);
-    var normal = math.vnorm(math.vcross(right, up));
-    // re-orthogonalize right against up
-    right = math.vnorm(math.vcross(up, normal));
+    var hx = player.x, hy = player.eye, hz = player.z;
+    var tx = hx - gx, ty = hy - gy, tz = hz - gz;
+    var td = Math.sqrt(tx * tx + ty * ty + tz * tz);
+    if (td < 0.05) { tx = 0; ty = 0; tz = -1; td = 1; }
+    var nx = tx / td, ny = ty / td, nz = tz / td;
 
-    // sit on top/inner face of left controller
-    var off = axis(0.0, 0.045, 0.055);
-    var px = gx + off[0], py = gy + off[1], pz = gz + off[2];
+    // sit a few cm toward the eyes so it clears the controller body
+    var px = gx + nx * 0.12;
+    var py = gy + ny * 0.12 + 0.02;
+    var pz = gz + nz * 0.12;
 
-    var sx = 0.22, sy = 0.14; // metres — readable at arm's length
+    var right = math.vnorm(math.vcross([0, 1, 0], [nx, ny, nz]));
+    if (Math.abs(right[0]) + Math.abs(right[1]) + Math.abs(right[2]) < 0.05) {
+      right = [1, 0, 0];
+    }
+    var up = math.vnorm(math.vcross([nx, ny, nz], right));
+    right = math.vnorm(math.vcross(up, [nx, ny, nz]));
+
+    var sx = 0.30, sy = 0.19; // metres — easy to read when raised
     var m = new Float32Array(16);
     m[0] = right[0] * sx; m[1] = right[1] * sx; m[2] = right[2] * sx; m[3] = 0;
     m[4] = up[0] * sy; m[5] = up[1] * sy; m[6] = up[2] * sy; m[7] = 0;
-    m[8] = normal[0]; m[9] = normal[1]; m[10] = normal[2]; m[11] = 0;
+    m[8] = nx; m[9] = ny; m[10] = nz; m[11] = 0;
     m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
     return m;
   }
@@ -1006,8 +1012,9 @@
   function updatePlayer(dt, vrInput) {
     if (CIR && CIR.isActive()) return; // locked into jack-in
     var crouch = !vrInput && (keys['ControlLeft'] || keys['ControlRight']);
-    var sprint = !vrInput && (keys['ShiftLeft'] || keys['ShiftRight']) && !crouch;
-    var speed = crouch ? SPEED_CROUCH : (sprint ? SPEED_SPRINT : SPEED_WALK);
+    var wantSprint = vrInput
+      ? (!!vrInput.sprint && !crouch)
+      : ((keys['ShiftLeft'] || keys['ShiftRight']) && !crouch);
 
     var mx = 0, mz = 0;
     if (vrInput) {
@@ -1020,11 +1027,23 @@
       if (keys['KeyA']) mx -= 1;
       if (keys['KeyD']) mx += 1;
     }
+    var moving = (mx !== 0 || mz !== 0);
+
+    if (staminaExhausted && stamina >= 0.35) staminaExhausted = false;
+    var sprint = wantSprint && moving && !staminaExhausted && stamina > STAMINA_MIN_SPRINT;
+    if (sprint) {
+      stamina = Math.max(0, stamina - STAMINA_DRAIN * dt);
+      if (stamina <= 0) { stamina = 0; staminaExhausted = true; sprint = false; }
+    } else {
+      stamina = Math.min(STAMINA_MAX, stamina + STAMINA_RECOVER * dt * (moving ? 0.7 : 1));
+    }
+
+    var speed = crouch ? SPEED_CROUCH : (sprint ? SPEED_SPRINT : SPEED_WALK);
 
     var targetEye = crouch ? EYE_CROUCH : EYE_STAND;
     player.eye += (targetEye - player.eye) * Math.min(1, dt * 10);
 
-    if (mx !== 0 || mz !== 0) {
+    if (moving) {
       var l = Math.sqrt(mx * mx + mz * mz);
       if (l > 1) { mx /= l; mz /= l; }
       var sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
@@ -1036,7 +1055,7 @@
       player.x = moved.x; player.z = moved.z;
 
       strideAcc += actual;
-      var stride = crouch ? 1.6 : (sprint ? 2.6 : 2.2);
+      var stride = crouch ? 1.6 : (sprint ? 2.4 : 2.2);
       if (strideAcc > stride) {
         strideAcc = 0;
         var loud = crouch ? NOISE_CROUCH : (sprint ? NOISE_SPRINT : NOISE_WALK);
@@ -1112,14 +1131,26 @@
     var micL = (NS.mic && NS.mic.level) ? NS.mic.level() : 0;
     var shownAux = Math.max(auxLoud, micL);
     el.auxFill.style.width = Math.min(100, shownAux * 100) + '%';
+    if (el.staFill) {
+      el.staFill.style.width = Math.min(100, stamina * 100) + '%';
+      el.staFill.style.background = staminaExhausted
+        ? 'rgba(255,80,80,0.95)'
+        : (stamina < 0.3 ? 'rgba(255,179,71,0.95)' : '');
+    }
 
     if (R.setVRHud) {
       R.setVRHud({
         hint: vrHudHint,
         obj: vrHudObj,
         aux: shownAux,
+        stamina: stamina,
+        exhausted: staminaExhausted,
         timer: el.timer.textContent,
-        chg: el.chg.textContent
+        chg: el.chg.textContent,
+        contacts: EN.contacts ? EN.contacts() : [{ x: EN.state.x, z: EN.state.z, state: EN.state.state }],
+        yaw: player.yaw,
+        px: player.x,
+        pz: player.z
       });
     }
 

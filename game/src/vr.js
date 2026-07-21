@@ -15,6 +15,7 @@
     moveX: 0, moveY: 0, heading: 0,
     bodyYaw: 0,
     trickle: false, burstPressed: false, interactPressed: false,
+    sprint: false,
     aimOrigin: null, aimDirection: null,
     wrist: null // left-controller grip pose in XR local space
   };
@@ -104,17 +105,31 @@
     return [Math.abs(x) > dead ? x : 0, Math.abs(y) > dead ? y : 0];
   }
 
+  function stickMag(gamepad) {
+    var a = axesFor(gamepad);
+    return Math.sqrt(a[0] * a[0] + a[1] * a[1]);
+  }
+
   function pressed(gamepad, index) {
     if (!gamepad || !gamepad.buttons || !gamepad.buttons[index]) return false;
     var b = gamepad.buttons[index];
     return !!(b.pressed || b.value > 0.45);
   }
 
-  function interactRising(id, gp) {
-    // Quest Touch: 3 = stick click, 4 = A/X, 5 = B/Y (grip is 1 — used for burst)
-    return rising(id + '-i3', pressed(gp, 3)) ||
-           rising(id + '-i4', pressed(gp, 4)) ||
-           rising(id + '-i5', pressed(gp, 5));
+  // Quest Browser is inconsistent about thumbstick-click index; also accept
+  // left grip and full stick deflection (push to run).
+  function leftSprint(gp) {
+    if (!gp) return false;
+    if (pressed(gp, 1)) return true;          // grip
+    if (pressed(gp, 3) || pressed(gp, 2)) return true; // stick click (varies)
+    return stickMag(gp) >= 0.88;              // push stick fully
+  }
+
+  function interactRising(id, gp, isLeft) {
+    // Quest Touch: 4 = A/X, 5 = B/Y. Stick click on RIGHT still interacts.
+    var press = rising(id + '-i4', pressed(gp, 4)) || rising(id + '-i5', pressed(gp, 5));
+    if (!isLeft) press = press || rising(id + '-i3', pressed(gp, 3)) || rising(id + '-i2', pressed(gp, 2));
+    return press;
   }
 
   function rising(key, value) {
@@ -146,6 +161,7 @@
     currentInput.trickle = false;
     currentInput.burstPressed = false;
     currentInput.interactPressed = false;
+    currentInput.sprint = false;
     currentInput.aimOrigin = null;
     currentInput.aimDirection = null;
     currentInput.wrist = null;
@@ -160,6 +176,7 @@
         leftSource = source;
         currentInput.moveX = axes[0];
         currentInput.moveY = -axes[1];
+        currentInput.sprint = leftSprint(gp);
       } else if (source.handedness === 'right') {
         rightSource = source;
         if (Math.abs(axes[0]) > 0.75 && !snapLatch) {
@@ -168,6 +185,12 @@
         } else if (Math.abs(axes[0]) < 0.35) {
           snapLatch = false;
         }
+      } else if (!leftSource && !rightSource) {
+        // Some browsers report handedness "none" — treat first pad as move+sprint
+        leftSource = source;
+        currentInput.moveX = axes[0];
+        currentInput.moveY = -axes[1];
+        currentInput.sprint = leftSprint(gp);
       }
 
       var id = source.handedness || String(i);
@@ -176,8 +199,8 @@
         currentInput.burstPressed = currentInput.burstPressed ||
           rising(id + '-burst', pressed(gp, 1));
       }
-      // Interact on either hand (A/X, B/Y, stick click)
-      currentInput.interactPressed = currentInput.interactPressed || interactRising(id, gp);
+      currentInput.interactPressed = currentInput.interactPressed ||
+        interactRising(id, gp, source.handedness === 'left');
     }
 
     if (!rightSource && session.inputSources.length) rightSource = session.inputSources[0];
