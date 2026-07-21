@@ -81,49 +81,29 @@
   }
 
   // ---- continuous layers -------------------------------------------------
+  // No constant engine/room drone — silence by default; proximity breath only.
   function startAmbient() {
     if (!ensure() || drone) return;
-    drone = {};
-    droneGain = ctx.createGain();
-    droneGain.gain.value = 0.05;
-    droneGain.connect(master);
+    drone = {}; // mark ambient started (breath layer only)
+    droneGain = null;
 
-    [38, 57].forEach(function (f, i) {
-      var o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = f;
-      o.detune.value = i ? 7 : -4;
-      var g = ctx.createGain();
-      g.gain.value = 0.5;
-      o.connect(g); g.connect(droneGain);
-      o.start();
-    });
-    var n = noiseSource();
-    var bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = 160; bp.Q.value = 0.6;
-    var ng = ctx.createGain(); ng.gain.value = 0.08;
-    n.connect(bp); bp.connect(ng); ng.connect(droneGain);
-    n.start();
-
-    // custodian breathing layer (gain driven per-frame)
+    // custodian breathing layer (gain driven per-frame; silent until near)
     var bn = noiseSource();
     var lp = ctx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 420;
     var lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.45;
     var lfoG = ctx.createGain(); lfoG.gain.value = 0.5;
-    var lfoBase = ctx.createGain(); lfoBase.gain.value = 1.0;
     breathGain = ctx.createGain(); breathGain.gain.value = 0.0;
     breathPan = panner(0);
     lfo.connect(lfoG);
     lfoG.connect(breathGain.gain);
     bn.connect(lp); lp.connect(breathGain); breathGain.connect(breathPan); breathPan.connect(master);
     bn.start(); lfo.start();
-    void lfoBase;
   }
 
-  function setAgitation(a) {           // 0..100 — tightens the room tone
-    if (!droneGain) return;
-    droneGain.gain.value = 0.05 + 0.0012 * a;
+  function setAgitation(a) {
+    // formerly pumped the room drone with agitation — drone removed
+    void a;
   }
 
   function setBreath(gain, pan) {      // proximity breathing, <14 m
