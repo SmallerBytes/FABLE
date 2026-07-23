@@ -1192,6 +1192,13 @@
     msgQueue.push({ text: text, cls: cls || '', hold: hold || (1.5 + text.length * 0.03) });
   }
 
+  // Immediate interaction feedback: jump the queue and show right away
+  function pushMsg(text, cls, hold) {
+    curMsg = null;
+    msgQueue.length = 0;
+    queueMsg(text, cls, hold);
+  }
+
   function updateMsg(dt) {
     if (!curMsg) {
       if (!msgQueue.length) return;
