@@ -1,35 +1,55 @@
-/* HOLLOW — circuit.js : jack-in routing puzzle (Spider-Man control-unit style). */
+/* HOLLOW — circuit.js : jack-in routing puzzle (fixed hard board). */
 (function (NS) {
   'use strict';
 
   // Tile masks: bit0=N bit1=E bit2=S bit3=W
   var STRAIGHT = 5;   // N+S
   var BEND = 3;       // N+E
+  var TEE = 7;        // N+E+S (three-way)
 
-  var SIZE = 4;
-  var TIMEOUT = 75;
+  var SIZE = 6;
+  var TIMEOUT = 120;
+  var COL_LABELS = 'ABCDEF';
 
-  // Fixed board — same every run. bit0=N bit1=E bit2=S bit3=W
-  // Solution path: ENTRY→(0,0)→(1,0)→(2,0)→(2,1)→(3,1)→(3,2)→(3,3)→CORE
+  // Fixed 6×6 — hard, always the same.
+  // Solution path:
+  // ENTRY→A1→B1→B2→C2→D2→D3→D4→E4→E5→F5→F6→CORE
+  // (E,S,E,E,S,S,E,S,E,S then east out)
   var FIXED_TILES = [
-    STRAIGHT, STRAIGHT, BEND,     STRAIGHT,
-    BEND,     STRAIGHT, BEND,     BEND,
-    STRAIGHT, BEND,     STRAIGHT, STRAIGHT,
-    BEND,     BEND,     STRAIGHT, BEND
+  // A      B      C      D      E      F
+    STRAIGHT, BEND,   TEE,     BEND,   STRAIGHT, BEND,     // 1
+    BEND,     BEND,   STRAIGHT, BEND,   TEE,     STRAIGHT, // 2
+    TEE,      STRAIGHT, BEND,   STRAIGHT, BEND,   BEND,     // 3
+    BEND,     TEE,    STRAIGHT, BEND,   BEND,    TEE,      // 4
+    STRAIGHT, BEND,   TEE,     BEND,   BEND,    BEND,     // 5
+    BEND,     STRAIGHT, BEND,   TEE,    STRAIGHT, BEND      // 6
   ];
-  // Solved orientations for the path above (distractors use stable fixed angles)
+
+  // Solved orientations for the path tiles (distractors keep fixed angles)
+  // STRAIGHT: 0=NS 1=EW · BEND: 0=NE 1=ES 2=SW 3=WN · TEE: 0=NES 1=ESW 2=SWN 3=WNE
   var FIXED_SOLUTION = [
-    1, 1, 2, 0,
-    0, 0, 0, 2,
-    0, 1, 0, 0,
-    0, 2, 0, 0
+  // A1=EW  B1=WS  C1     D1     E1     F1
+    1,      2,     0,     1,     0,     0,
+  // A2     B2=NE  C2=EW  D2=WS  E2     F2
+    1,      0,     1,     2,     2,     1,
+  // A3     B3     C3     D3=NS  E3     F3
+    0,      0,     3,     0,     1,     2,
+  // A4     B4     C4     D4=NE  E4=WS  F4
+    2,      1,     0,     0,     2,     0,
+  // A5     B5     C5     D5     E5=NE  F5=WS
+    0,      3,     2,     1,     0,     2,
+  // A6     B6     C6     D6     E6     F6=NE
+    1,      0,     0,     3,     1,     0
   ];
-  // Player start: six tiles misaligned from the solution
+
+  // Unsolved start — most tiles wrong; same sheet the Mission Director prints
   var FIXED_START = [
-    0, 1, 0, 0,
-    0, 0, 2, 2,
-    0, 1, 0, 1,
-    0, 0, 0, 3
+    0, 0, 1, 0, 1, 2,
+    0, 2, 0, 0, 0, 0,
+    2, 1, 1, 1, 0, 0,
+    0, 0, 2, 2, 0, 1,
+    1, 1, 0, 0, 3, 0,
+    0, 1, 2, 1, 0, 2
   ];
 
   var active = false;
@@ -43,6 +63,9 @@
   var canvas = null, ctx = null;
   var confirmHold = 0;
   var dirty = true;
+  var CELL = 58;
+  var PAD = 52;
+  var TOP = 72;
 
   function rotateMask(mask, turns) {
     turns = ((turns % 4) + 4) % 4;
@@ -59,6 +82,10 @@
   }
 
   function idx(c, r) { return r * SIZE + c; }
+
+  function tileLabel(c, r) {
+    return COL_LABELS.charAt(c) + (r + 1);
+  }
 
   function resetPuzzle() {
     tiles = FIXED_TILES.slice();
@@ -82,7 +109,6 @@
     return liveSet()[idx(SIZE - 1, SIZE - 1)] === true && !!(maskAt(SIZE - 1, SIZE - 1) & 2);
   }
 
-  // Flood from ENTRY; used for win-check and "powered" tile feedback.
   function liveSet() {
     var live = {};
     if (!(maskAt(0, 0) & 8)) return live;
@@ -119,13 +145,14 @@
     if (canvas) return;
     canvas = document.createElement('canvas');
     canvas.id = 'circuit-overlay';
-    canvas.width = 420;
-    canvas.height = 460;
+    canvas.width = PAD * 2 + CELL * SIZE;
+    canvas.height = TOP + CELL * SIZE + 36;
     canvas.style.cssText = [
       'position:absolute', 'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
       'z-index:8', 'pointer-events:auto', 'display:none',
       'border:1px solid #7cff9b', 'background:rgba(0,8,4,0.92)',
-      'box-shadow:0 0 24px rgba(124,255,155,0.25)'
+      'box-shadow:0 0 24px rgba(124,255,155,0.25)',
+      'max-width:92vw', 'max-height:88vh'
     ].join(';');
     document.body.appendChild(canvas);
     ctx = canvas.getContext('2d');
@@ -136,9 +163,8 @@
       var rect = canvas.getBoundingClientRect();
       var x = (e.clientX - rect.left) * (canvas.width / rect.width);
       var y = (e.clientY - rect.top) * (canvas.height / rect.height);
-      var pad = 40, cell = 80;
-      var c = Math.floor((x - pad) / cell);
-      var r = Math.floor((y - pad - 20) / cell);
+      var c = Math.floor((x - PAD) / CELL);
+      var r = Math.floor((y - TOP) / CELL);
       if (c >= 0 && r >= 0 && c < SIZE && r < SIZE) {
         selected = idx(c, r);
         rotateSelected();
@@ -146,19 +172,22 @@
     });
   }
 
+  function arm() { return CELL * 0.42; }
+
   function drawPipe(cx, cy, mask, color, width) {
+    var a = arm();
     ctx.strokeStyle = color;
-    ctx.lineWidth = width || 8;
+    ctx.lineWidth = width || Math.max(5, CELL * 0.12);
     ctx.lineCap = 'round';
     ctx.beginPath();
-    if (mask & 1) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - 28); }
-    if (mask & 2) { ctx.moveTo(cx, cy); ctx.lineTo(cx + 28, cy); }
-    if (mask & 4) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + 28); }
-    if (mask & 8) { ctx.moveTo(cx, cy); ctx.lineTo(cx - 28, cy); }
+    if (mask & 1) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - a); }
+    if (mask & 2) { ctx.moveTo(cx, cy); ctx.lineTo(cx + a, cy); }
+    if (mask & 4) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy + a); }
+    if (mask & 8) { ctx.moveTo(cx, cy); ctx.lineTo(cx - a, cy); }
     ctx.stroke();
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, Math.max(3, CELL * 0.07), 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -167,65 +196,77 @@
     ctx.fillStyle = '#020805';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#7cff9b';
-    ctx.font = '14px Consolas, monospace';
+    ctx.font = 'bold 15px Consolas, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('JACK-IN ROUTING MATRIX', canvas.width / 2, 22);
+    ctx.fillText('JACK-IN ROUTING MATRIX 6×6', canvas.width / 2, 22);
     ctx.fillStyle = '#3f8a55';
     ctx.font = '11px Consolas, monospace';
     if (inVR()) {
-      ctx.fillText('STICK MOVE · A/X ROTATE · TRIGGER = NEXT TILE', canvas.width / 2, 40);
+      ctx.fillText('STICK MOVE · A/X ROTATE · TRIGGER = NEXT · CALL TILE IDs (A1…F6)', canvas.width / 2, 42);
     } else {
-      ctx.fillText('CLICK TILE TO ROTATE — CONNECT ENTRY → CORE', canvas.width / 2, 40);
+      ctx.fillText('CLICK TO ROTATE — CONNECT ENTRY → CORE · TILE IDs A1…F6', canvas.width / 2, 42);
     }
-    ctx.fillStyle = timeLeft < 10 ? '#ff4444' : '#ffb347';
-    ctx.fillText('LOCKOUT T-' + Math.ceil(timeLeft) + 's', canvas.width / 2, 56);
+    ctx.fillStyle = timeLeft < 15 ? '#ff4444' : '#ffb347';
+    ctx.fillText('LOCKOUT T-' + Math.ceil(timeLeft) + 's', canvas.width / 2, 60);
 
-    var pad = 40, cell = 80;
     var live = liveSet();
     var ok = connected();
 
-    // ENTRY / CORE stubs so the required openings are obvious
     ctx.strokeStyle = live[idx(0, 0)] ? '#9fffbb' : '#ffb347';
     ctx.lineWidth = 6;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(pad - 18, pad + 20 + cell * 0.5);
-    ctx.lineTo(pad + 8, pad + 20 + cell * 0.5);
+    ctx.moveTo(PAD - 22, TOP + CELL * 0.5);
+    ctx.lineTo(PAD + 6, TOP + CELL * 0.5);
     ctx.stroke();
     ctx.strokeStyle = ok ? '#9fffbb' : '#ffb347';
     ctx.beginPath();
-    ctx.moveTo(pad + SIZE * cell - 8, pad + 20 + cell * (SIZE - 0.5));
-    ctx.lineTo(pad + SIZE * cell + 18, pad + 20 + cell * (SIZE - 0.5));
+    ctx.moveTo(PAD + SIZE * CELL - 6, TOP + CELL * (SIZE - 0.5));
+    ctx.lineTo(PAD + SIZE * CELL + 22, TOP + CELL * (SIZE - 0.5));
     ctx.stroke();
 
     ctx.fillStyle = '#7cff9b';
-    ctx.font = '12px Consolas, monospace';
-    ctx.fillText('ENTRY', 22, pad + 20 + cell * 0.5 + 16);
-    ctx.fillText('CORE', canvas.width - 22, pad + 20 + cell * (SIZE - 0.5) + 16);
+    ctx.font = '11px Consolas, monospace';
+    ctx.fillText('ENTRY', 20, TOP + CELL * 0.5 + 14);
+    ctx.fillText('CORE', canvas.width - 20, TOP + CELL * (SIZE - 0.5) + 14);
+
+    // column headers
+    ctx.fillStyle = '#3f8a55';
+    ctx.font = '10px Consolas, monospace';
+    for (var c = 0; c < SIZE; c++) {
+      ctx.fillText(COL_LABELS.charAt(c), PAD + c * CELL + CELL * 0.5, TOP - 6);
+    }
 
     for (var r = 0; r < SIZE; r++) {
-      for (var c = 0; c < SIZE; c++) {
+      ctx.fillStyle = '#3f8a55';
+      ctx.fillText(String(r + 1), PAD - 12, TOP + r * CELL + CELL * 0.55);
+      for (c = 0; c < SIZE; c++) {
         var i = idx(c, r);
-        var x = pad + c * cell, y = pad + 20 + r * cell;
+        var x = PAD + c * CELL, y = TOP + r * CELL;
         var powered = !!live[i];
         ctx.strokeStyle = i === selected ? '#ffb347' : (powered ? '#7cff9b' : '#3f8a55');
         ctx.lineWidth = i === selected ? 2.5 : 1;
-        ctx.strokeRect(x + 4, y + 4, cell - 8, cell - 8);
+        ctx.strokeRect(x + 3, y + 3, CELL - 6, CELL - 6);
         var col = ok ? '#9fffbb' : (powered ? '#b8ffd0' : '#4a7a58');
-        drawPipe(x + cell / 2, y + cell / 2, maskAt(c, r), col, powered ? 9 : 7);
+        drawPipe(x + CELL / 2, y + CELL / 2, maskAt(c, r), col, powered ? 8 : 6);
 
-        // bright joint dots where this tile already mates with a neighbor
+        ctx.fillStyle = i === selected ? '#ffb347' : '#2a5a3a';
+        ctx.font = '9px Consolas, monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(tileLabel(c, r), x + 6, y + 14);
+        ctx.textAlign = 'center';
+
         var m = maskAt(c, r);
         if ((m & 2) && c + 1 < SIZE && (maskAt(c + 1, r) & 8)) {
           ctx.fillStyle = '#ffb347';
           ctx.beginPath();
-          ctx.arc(x + cell - 2, y + cell / 2, 3.5, 0, Math.PI * 2);
+          ctx.arc(x + CELL - 2, y + CELL / 2, 3, 0, Math.PI * 2);
           ctx.fill();
         }
         if ((m & 4) && r + 1 < SIZE && (maskAt(c, r + 1) & 1)) {
           ctx.fillStyle = '#ffb347';
           ctx.beginPath();
-          ctx.arc(x + cell / 2, y + cell - 2, 3.5, 0, Math.PI * 2);
+          ctx.arc(x + CELL / 2, y + CELL - 2, 3, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -233,11 +274,11 @@
     if (ok) {
       ctx.fillStyle = '#ffb347';
       ctx.font = '13px Consolas, monospace';
-      ctx.fillText('PATH VALID — HOLDING TO CONFIRM…', canvas.width / 2, canvas.height - 16);
+      ctx.fillText('PATH VALID — HOLDING TO CONFIRM…', canvas.width / 2, canvas.height - 12);
     } else {
       ctx.fillStyle = '#3f8a55';
-      ctx.font = '11px Consolas, monospace';
-      ctx.fillText('LIT TILES = POWERED FROM ENTRY · JOIN AMBER DOTS TO CORE', canvas.width / 2, canvas.height - 16);
+      ctx.font = '10px Consolas, monospace';
+      ctx.fillText('LIT = POWERED FROM ENTRY · CALL OUT TILE IDs TO ROTATE', canvas.width / 2, canvas.height - 12);
     }
     dirty = true;
   }
@@ -297,7 +338,6 @@
     onSuccess = successCb;
     onTimeout = timeoutCb;
     active = true;
-    // DOM overlay is desktop-only — WebXR cannot see HTML layers
     canvas.style.display = inVR() ? 'none' : 'block';
     render();
   }
@@ -310,11 +350,26 @@
     dirty = true;
   }
 
+  // Sheet data for printable Mission Director packet (unsolved)
+  function getSheetData() {
+    return {
+      size: SIZE,
+      colLabels: COL_LABELS,
+      tiles: FIXED_TILES.slice(),
+      start: FIXED_START.slice(),
+      solution: FIXED_SOLUTION.slice(),
+      straight: STRAIGHT,
+      bend: BEND,
+      tee: TEE
+    };
+  }
+
   NS.circuit = {
     open: open, close: close, update: update, rotateSelected: rotateSelected,
     moveSelection: moveSelection, nextTile: nextTile,
     isActive: function () { return active; },
     getCanvas: function () { return canvas; },
+    getSheetData: getSheetData,
     consumeDirty: function () {
       var d = dirty;
       dirty = false;

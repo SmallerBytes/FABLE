@@ -854,7 +854,7 @@
     var nx = -sy, ny = 0, nz = cy;
     var right = math.vnorm(math.vcross([0, 1, 0], [nx, ny, nz]));
     var up = math.vnorm(math.vcross([nx, ny, nz], right));
-    var sx = 0.72, sy2 = 0.78;
+    var sx = 0.92, sy2 = 0.98;
     var m = new Float32Array(16);
     m[0] = right[0] * sx; m[1] = right[1] * sx; m[2] = right[2] * sx; m[3] = 0;
     m[4] = up[0] * sy2; m[5] = up[1] * sy2; m[6] = up[2] * sy2; m[7] = 0;
