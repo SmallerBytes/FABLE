@@ -144,7 +144,7 @@
     <div id="boot-continue" style="display:none">
       <h1>HOLLOW</h1>
       <div class="sub">CYBER INFILTRATION — RD-9 LiDAR / MOTION TRACKER<br>
-      HOSTILE AI CORE · EMP BLACKOUT · CLONE · THEN RESCUE OR VIRUS</div>
+      HOSTILE AI CORE · EMP BLACKOUT · CLONE · EXTRACT</div>
       <div class="opt-row">
         <label>SENS <input type="range" id="opt-sens" min="2" max="20" value="8"></label>
         <label>VOL <input type="range" id="opt-vol" min="0" max="100" value="70"></label>
@@ -183,20 +183,17 @@
   MISSION:   RECOVER 3 ACCESS KEYS <span class="amber">[AMBER]</span>
              OPEN CONSOLE DOOR (ALL 3 KEYS) → JACK INTO AI CORE
              CLONE THE MODEL TO HARD DRIVE
-             THEN CHOOSE ONE: RESCUE POW (DARK GREEN) <span class="dim">OR</span> PLANT VIRUS
-             AFTER CHOICE: MAP GUIDE VOICES YOU — LZ NOT PAINTED ON LiDAR
+             EXTRACT VIA LZ — MAP GUIDE VOICES YOU (LZ NOT PAINTED ON LiDAR)
+             OPTIONAL BLAST DOORS = SHORTCUTS (1 KEY EACH)
 
   <span style="color:#0f0">HARBOR GREEN</span> = ONE FARADAY SAFE ROOM (START / INFIL ROOM)
   <span class="amber">YELLOW</span> = TRIPWIRE ALARM
   <span style="color:#4a6cff">DARK BLUE</span> = BLAST DOORS
-  <span style="color:#0a722e">DARK GREEN</span> = POW (AFTER RESCUE PATH — ESCORT TO LZ)
   <span class="dim">LZ (X ON MAP)</span> = CHOPPER PAD — NOT PAINTED AFTER UPLINK; GUIDE REQUIRED
 
   <span class="red">RED RETURNS = SECURITY (3 UNITS ACTIVE). DO NOT ENGAGE.</span>
   <span class="dim">WRISTLINK MOTION TRACKER FLAGS SECURITY. MIC / VOICE RAISES SIGNATURE.</span>
   <span class="dim">VR SPRINT: HOLD LEFT GRIP (OR STICK CLICK). WALK IS DEFAULT. LOUD + STAMINA.</span>
-  <span class="dim">VR VIRUS PATH: HOLD RIGHT B AT CONSOLE — WRISTLINK SHOWS UPLOAD.</span>
-  <span class="dim">DESKTOP VIRUS: HOLD E AT CONSOLE TO UPLOAD.</span>
   <span class="dim">RAISE LEFT CONTROLLER — WRISTLINK FOLLOWS THE CONTROLLER (MOTION + STAMINA).</span>
   <span class="dim">VR JACK-IN: 6×6 MATRIX · TILE IDs A1–F6 · STICK MOVE · A ROTATE · TRIGGER NEXT.</span>
   <span class="dim">PRINT CIRCUIT DOWNLOAD FOR THE OUTSIDE SOLVER — SAME UNSOLVED BOARD.</span></pre>
@@ -213,9 +210,9 @@
       <button type="button" class="menu-btn primary" id="btn-start-desktop">START DESKTOP</button>
       <button id="enter-vr" type="button" class="menu-btn" disabled>CHECKING WEBXR...</button>
     </div>
-    <div id="vr-note">QUEST: HOLD LEFT GRIP TO SPRINT · RAISE LEFT CONTROLLER FOR WRISTLINK · HOLD RIGHT B AT CONSOLE TO PLANT VIRUS · RIGHT STICK TURN · TRIGGER SCAN · RIGHT GRIP BURST · A/X INTERACT</div>
+    <div id="vr-note">QUEST: HOLD LEFT GRIP TO SPRINT · RAISE LEFT CONTROLLER FOR WRISTLINK · RIGHT STICK TURN · TRIGGER SCAN · RIGHT GRIP BURST · A/X INTERACT</div>
     <p style="margin-top:18px">
-      <a href="map-print.html?v=45" target="_blank" rel="noopener"
+      <a href="map-print.html?v=47" target="_blank" rel="noopener"
          style="color:#7cff9b;border:1px solid #7cff9b;padding:8px 14px;text-decoration:none;display:inline-block;pointer-events:auto;margin:4px">
         MAP DOWNLOAD
       </a>
@@ -260,14 +257,14 @@
 
 <div id="crt-frame"></div>
 
-<script src="src/math.js?v=46"></script>
-<script src="src/map.js?v=46"></script>
-<script src="src/render.js?v=46"></script>
-<script src="src/audio.js?v=46"></script>
-<script src="src/mic.js?v=46"></script>
-<script src="src/enemy.js?v=46"></script>
-<script src="src/circuit.js?v=46"></script>
-<script src="src/vr.js?v=46"></script>
-<script src="src/game.js?v=46"></script>
+<script src="src/math.js?v=47"></script>
+<script src="src/map.js?v=47"></script>
+<script src="src/render.js?v=47"></script>
+<script src="src/audio.js?v=47"></script>
+<script src="src/mic.js?v=47"></script>
+<script src="src/enemy.js?v=47"></script>
+<script src="src/circuit.js?v=47"></script>
+<script src="src/vr.js?v=47"></script>
+<script src="src/game.js?v=47"></script>
 </body>
 </html>
