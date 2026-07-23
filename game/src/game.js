@@ -1081,10 +1081,8 @@
   function readMemo(i) {
     if (memos[i].read) return false;
     memos[i].read = true;
-    queueMsg(MEMO_TEXTS[memos[i].i], 'amber', 9);
-    A.fuseChime();
-    A.teletype();
-    A.teletype();
+    // No eventline dump — intel memos stay silent (map guide / discovery only)
+    if (A.fuseChime) A.fuseChime();
     return true;
   }
 
@@ -1600,7 +1598,7 @@
               : btn + ' UNLOCK BLAST DOOR';
           }
         } else if (aim && aim.kind === 'memo' && aim.dist <= memoRange() + 0.4) {
-          hint = btn + ' READ INTEL';
+          // silent pickup — no hint text
         }
       }
       for (i = 0; i < accessKeys.length; i++) {
@@ -1638,7 +1636,7 @@
       }
       for (i = 0; i < memos.length; i++) {
         if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
-          hint = inVR() ? btn + ' READ INTEL' : '';
+          // silent — no eventline / hint dump
         }
       }
       vrHudHint = hint;
