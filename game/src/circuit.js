@@ -8,14 +8,34 @@
 
   var SIZE = 4;
   var TIMEOUT = 75;
-  var SCRAMBLE_MIN = 5;
-  var SCRAMBLE_MAX = 7;
+
+  // Fixed board — same every run. bit0=N bit1=E bit2=S bit3=W
+  // Solution path: ENTRY→(0,0)→(1,0)→(2,0)→(2,1)→(3,1)→(3,2)→(3,3)→CORE
+  var FIXED_TILES = [
+    STRAIGHT, STRAIGHT, BEND,     STRAIGHT,
+    BEND,     STRAIGHT, BEND,     BEND,
+    STRAIGHT, BEND,     STRAIGHT, STRAIGHT,
+    BEND,     BEND,     STRAIGHT, BEND
+  ];
+  // Solved orientations for the path above (distractors use stable fixed angles)
+  var FIXED_SOLUTION = [
+    1, 1, 2, 0,
+    0, 0, 0, 2,
+    0, 1, 0, 0,
+    0, 2, 0, 0
+  ];
+  // Player start: six tiles misaligned from the solution
+  var FIXED_START = [
+    0, 1, 0, 0,
+    0, 0, 2, 2,
+    0, 1, 0, 1,
+    0, 0, 0, 3
+  ];
 
   var active = false;
   var tiles = [];
   var rot = [];
   var solutionRot = [];
-  var pathCells = {};
   var selected = 0;
   var timeLeft = TIMEOUT;
   var onSuccess = null;
@@ -40,73 +60,10 @@
 
   function idx(c, r) { return r * SIZE + c; }
 
-  function typeForMask(m) {
-    return (m === 5 || m === 10) ? STRAIGHT : BEND;
-  }
-
-  function rotationForMask(type, target) {
-    for (var t = 0; t < 4; t++) {
-      if (rotateMask(type, t) === target) return t;
-    }
-    return 0;
-  }
-
-  // Guaranteed-solvable board: carve a random E/S lattice path ENTRY→CORE,
-  // place matching tiles, fill distractors, then scramble only a few rotations
-  // away from the solution so it stays fair in VR.
   function resetPuzzle() {
-    var DIRBIT = { N: 1, E: 2, S: 4, W: 8 };
-    var OPP = { N: 'S', E: 'W', S: 'N', W: 'E' };
-
-    var moves = [];
-    for (var k = 0; k < SIZE - 1; k++) { moves.push('E'); moves.push('S'); }
-    for (k = moves.length - 1; k > 0; k--) {
-      var j = Math.floor(Math.random() * (k + 1));
-      var tmp = moves[k]; moves[k] = moves[j]; moves[j] = tmp;
-    }
-
-    var pathMask = {};
-    pathCells = {};
-    var c = 0, r = 0, inDir = 'W';
-    for (k = 0; k <= moves.length; k++) {
-      var outDir = k < moves.length ? moves[k] : 'E';
-      var id = idx(c, r);
-      pathMask[id] = DIRBIT[inDir] | DIRBIT[outDir];
-      pathCells[id] = true;
-      if (k < moves.length) {
-        if (outDir === 'E') c++; else r++;
-        inDir = OPP[outDir];
-      }
-    }
-
-    tiles = [];
-    solutionRot = [];
-    for (var i = 0; i < SIZE * SIZE; i++) {
-      var m = pathMask[i];
-      var type = m ? typeForMask(m) : (Math.random() < 0.55 ? STRAIGHT : BEND);
-      tiles.push(type);
-      solutionRot.push(m ? rotationForMask(type, m) : Math.floor(Math.random() * 4));
-    }
-
-    // Start from the solved board, then misalign a handful of tiles.
-    rot = solutionRot.slice();
-    var scramble = SCRAMBLE_MIN + Math.floor(Math.random() * (SCRAMBLE_MAX - SCRAMBLE_MIN + 1));
-    var touched = {};
-    var guard = 0;
-    while (scramble > 0 && guard++ < 64) {
-      var pi = Math.floor(Math.random() * SIZE * SIZE);
-      if (touched[pi]) continue;
-      touched[pi] = true;
-      var offset = 1 + Math.floor(Math.random() * 3);
-      rot[pi] = (solutionRot[pi] + offset) % 4;
-      scramble--;
-    }
-    guard = 0;
-    while (connected() && guard++ < 24) {
-      pi = Math.floor(Math.random() * SIZE * SIZE);
-      rot[pi] = (rot[pi] + 1) % 4;
-    }
-
+    tiles = FIXED_TILES.slice();
+    solutionRot = FIXED_SOLUTION.slice();
+    rot = FIXED_START.slice();
     selected = 0;
     timeLeft = TIMEOUT;
     confirmHold = 0;
