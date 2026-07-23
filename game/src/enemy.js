@@ -6,6 +6,8 @@
   var SPEED_PATROL = 2.0;
   var SPEED_INVESTIGATE = 3.4;
   var SPEED_CHASE = 6.0;
+  var SPEED_ALARM = 5.6;      // tripwire / lockout response
+  var SPEED_CONVERGE = 6.4;   // virus success → LZ rush
   var KILL_RANGE = 1.3;
   var TOUCH_RANGE = 3.5;
   var CHASE_CONF = 0.75;
@@ -38,6 +40,8 @@
   // body presentation
   var facing = 0, animT = 0;
   var bodyCache = null;
+  var hasteTimer = 0;
+  var hasteMode = 'NONE'; // NONE | ALARM | CONVERGE
   var skipX = 0, skipZ = 0, skipTimer = 0;
 
   // Secondary security units (independent stalkers)
@@ -70,6 +74,7 @@
     waypoints = M.patrolWaypoints();
     facing = 0; animT = 0; bodyCache = null;
     skipX = 0; skipZ = 0; skipTimer = 0;
+    hasteTimer = 0; hasteMode = 'NONE';
 
     // Three units active from the start — spread across the site
     B.lairX = 4.5; B.lairZ = 4.5;
@@ -175,23 +180,44 @@
     }
   }
 
+  function pulseHaste(mode, seconds) {
+    hasteMode = mode;
+    hasteTimer = Math.max(hasteTimer, seconds);
+  }
+
+  function moveSpeed(base) {
+    if (hasteTimer <= 0 || hasteMode === 'NONE') return base;
+    if (hasteMode === 'ALARM') return Math.max(base, SPEED_ALARM);
+    if (hasteMode === 'CONVERGE') return Math.max(base, SPEED_CONVERGE);
+    return base;
+  }
+
   function forceInvestigate(x, z) {
-    if (E.state === 'DORMANT') {
-      E.state = 'PATROL';
-    }
-    E.agitation = Math.min(100, E.agitation + 35);
+    // Security alarm: all units sprint to the trip — no long dwell
+    pulseHaste('ALARM', 14);
+    if (E.state === 'DORMANT') E.state = 'PATROL';
+    E.agitation = Math.min(100, E.agitation + 55);
+    E.agitationFloor = Math.max(E.agitationFloor, 30);
     lastKnownX = x; lastKnownZ = z;
     lastNoiseFed = (typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000);
     mustInvestigateAfterChase = false;
-    if (E.agitation >= 55) {
-      enterChase();
-      setPathTo(x, z);
-    } else {
-      if (E.state === 'CHASE') NS.audio.sting(false);
-      E.state = 'INVESTIGATE';
-      investigateTarget = { x: x, z: z };
-      dwellTimer = 0;
-      setPathTo(x, z);
+    if (E.state === 'CHASE') NS.audio.sting(false);
+    E.state = 'INVESTIGATE';
+    investigateTarget = { x: x, z: z };
+    dwellTimer = 0;
+    setPathTo(x, z);
+
+    for (var i = 0; i < SECONDARIES.length; i++) {
+      var U = SECONDARIES[i];
+      if (U.state === 'DORMANT') U.state = 'PATROL';
+      U.agitation = Math.min(100, U.agitation + 50);
+      U.agitationFloor = Math.max(U.agitationFloor, 24);
+      U.lastKnownX = x; U.lastKnownZ = z;
+      U.lastNoiseFed = lastNoiseFed;
+      U.state = 'INVESTIGATE';
+      U.path = M.astar(U.x, U.z, x, z);
+      U.pathIdx = 0;
+      U.repathTimer = 0;
     }
   }
 
@@ -206,16 +232,17 @@
     enterChase();
   }
 
-  // Quiet converge: all units path toward a site (e.g. LZ) without chase sting.
+  // Quiet converge: all units rush toward LZ vicinity (virus success).
   function convergeOn(x, z) {
+    pulseHaste('CONVERGE', 28);
     var offsets = [
       { x: 0, z: 0 },
-      { x: 6, z: 4 },
-      { x: -5, z: 7 }
+      { x: 5, z: 3 },
+      { x: -4, z: 6 }
     ];
     var tx = x + offsets[0].x, tz = z + offsets[0].z;
-    E.agitation = Math.min(100, E.agitation + 25);
-    E.agitationFloor = Math.max(E.agitationFloor, 20);
+    E.agitation = Math.min(100, E.agitation + 40);
+    E.agitationFloor = Math.max(E.agitationFloor, 35);
     lastKnownX = tx; lastKnownZ = tz;
     mustInvestigateAfterChase = false;
     if (E.state === 'CHASE') NS.audio.sting(false);
@@ -227,8 +254,8 @@
     for (var i = 0; i < SECONDARIES.length; i++) {
       var U = SECONDARIES[i];
       var ox = x + offsets[i + 1].x, oz = z + offsets[i + 1].z;
-      U.agitation = Math.min(100, U.agitation + 22);
-      U.agitationFloor = Math.max(U.agitationFloor, 16);
+      U.agitation = Math.min(100, U.agitation + 38);
+      U.agitationFloor = Math.max(U.agitationFloor, 30);
       U.lastKnownX = ox; U.lastKnownZ = oz;
       U.state = 'INVESTIGATE';
       U.path = M.astar(U.x, U.z, ox, oz);
@@ -321,6 +348,10 @@
     E.agitation = Math.max(E.agitationFloor, E.agitation - AGITATION_DECAY * dt);
     NS.audio.setAgitation(E.agitation);
     animT += dt;
+    if (hasteTimer > 0) {
+      hasteTimer -= dt;
+      if (hasteTimer <= 0) { hasteTimer = 0; hasteMode = 'NONE'; }
+    }
 
     var dist = distToPlayer(p);
     var playerSafe = M.isSafeAt(p.x, p.z);
@@ -357,7 +388,7 @@
         break;
 
       case 'PATROL':
-        speed = SPEED_PATROL;
+        speed = moveSpeed(SPEED_PATROL);
         if (!path || pathIdx >= path.length) {
           var t = pickPatrolTarget(p);
           if (t) setPathTo(t.x, t.z);
@@ -366,7 +397,7 @@
         break;
 
       case 'INVESTIGATE':
-        speed = SPEED_INVESTIGATE;
+        speed = moveSpeed(SPEED_INVESTIGATE);
         arrived = followPath(dt, speed);
         if (arrived) {
           dwellTimer += dt;
@@ -376,17 +407,26 @@
           var cz = E.z + Math.sin(dwellAngle) * 0.5 * dt;
           var mv = M.moveWithCollision(E.x, E.z, cx, cz, RADIUS);
           E.x = mv.x; E.z = mv.z;
-          var dwellNeeded = 4 + math.rand() * 4;
+          // Alarm / converge: barely dwell — keep pressure moving
+          var dwellNeeded = (hasteMode === 'ALARM' || hasteMode === 'CONVERGE')
+            ? (0.35 + math.rand() * 0.45)
+            : (4 + math.rand() * 4);
           if (dwellTimer > dwellNeeded) {
             mustInvestigateAfterChase = false;
-            E.state = 'PATROL';
-            path = null;
+            if (hasteMode === 'CONVERGE' && investigateTarget) {
+              // re-path toward LZ cluster instead of going idle
+              setPathTo(investigateTarget.x, investigateTarget.z);
+              dwellTimer = 0;
+            } else {
+              E.state = 'PATROL';
+              path = null;
+            }
           }
         }
         break;
 
       case 'CHASE':
-        speed = SPEED_CHASE;
+        speed = moveSpeed(SPEED_CHASE);
         repathTimer -= dt;
         var fed = (now - lastNoiseFed) < CHASE_LOSE_S;
         if (fed && repathTimer <= 0) {
@@ -468,7 +508,7 @@
         }
         break;
       case 'PATROL':
-        speed = SPEED_PATROL * speedScale;
+        speed = moveSpeed(SPEED_PATROL) * speedScale;
         if (!U.path || U.pathIdx >= U.path.length) {
           var t = pickPatrolTarget(p);
           if (t) { U.path = M.astar(U.x, U.z, t.x, t.z); U.pathIdx = 0; }
@@ -476,15 +516,23 @@
         followPathUnit(U, dt, speed);
         break;
       case 'INVESTIGATE':
-        speed = SPEED_INVESTIGATE * speedScale;
+        speed = moveSpeed(SPEED_INVESTIGATE) * speedScale;
         if (!U.path) { U.path = M.astar(U.x, U.z, p.x, p.z); U.pathIdx = 0; }
         if (followPathUnit(U, dt, speed)) {
-          U.state = 'PATROL';
-          U.path = null;
+          if (hasteMode === 'CONVERGE' && U.lastKnownX != null) {
+            U.path = M.astar(U.x, U.z, U.lastKnownX, U.lastKnownZ);
+            U.pathIdx = 0;
+          } else if (hasteMode === 'ALARM' && U.lastKnownX != null) {
+            U.path = M.astar(U.x, U.z, U.lastKnownX, U.lastKnownZ);
+            U.pathIdx = 0;
+          } else {
+            U.state = 'PATROL';
+            U.path = null;
+          }
         }
         break;
       case 'CHASE':
-        speed = SPEED_CHASE * (speedScale - 0.03);
+        speed = moveSpeed(SPEED_CHASE) * (speedScale - 0.03);
         U.repathTimer -= dt;
         var fed = (now - U.lastNoiseFed) < CHASE_LOSE_S;
         if (fed && U.repathTimer <= 0) {
