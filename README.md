@@ -1,9 +1,8 @@
-# H O L L O W (1988) — Archive Reconstruction
+# H O L L O W — Cyber Infiltration
 
 ```
-PROPERTY OF FABLE DYNAMICS — APPLIED OPTICS DIVISION
-PROJECT HOLLOW / BUILD 0.7.2 / TAPE 7 OF 9
-RECOVERED 2026 — SITE C SUBLEVEL STORAGE
+PROJECT HOLLOW / BUILD 0.9.3 / RD-9 BLACKOUT LOADOUT
+HOSTILE AI SITE — EMP RAID ARCHIVE
 ```
 
 A first-person **cyber raid** prototype played in total darkness. The only
@@ -32,17 +31,17 @@ VR, one **Mission Director** with a printed/PDF map directing by voice.
 - Exercise guide: [`docs/SOS_Exercise.md`](docs/SOS_Exercise.md)
 - Mission map PDF: [`game/assets/HOLLOW_Mission_Map.pdf`](game/assets/HOLLOW_Mission_Map.pdf)
 - Printable diagram: [`game/map-print.html`](game/map-print.html)
-- Live game: https://smallerbytes.github.io/FABLE/game/
+- Live game: https://smallerbytes.github.io/HOLLOW/game/
 
 **Objective:** recover access keys → unlock blast doors → jack-in circuit puzzle →
-board the flashing **LZ** before the chopper departs.
+board the **LZ** before the chopper departs (8:00 blackout window).
 
-**Harbor green** = Faraday shelter · **Yellow** = tripwire · **White flash** = LZ.
+**Harbor green** = Faraday shelter · **Yellow** = tripwire · **LZ** = chopper pad (map-guided).
 **Headset mic** speech contributes to signature (EMCON).
 
 ## Quest 2 / WebXR
 
-Open **https://smallerbytes.github.io/FABLE/game/** in Quest Browser (HTTPS required).
+Open **https://smallerbytes.github.io/HOLLOW/game/** in Quest Browser (HTTPS required).
 
 1. Continue past the boot screen and choose **ENTER VR (QUEST)**.
 2. Approve immersive VR and microphone permissions.

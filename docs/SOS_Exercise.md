@@ -34,7 +34,7 @@ Fictional enemy C2 node raid. No real unit OPSEC.
 ## Setup
 
 1. Print/open the Mission Map for the MD.
-2. Operator opens https://smallerbytes.github.io/FABLE/game/ in Quest Browser.
+2. Operator opens https://smallerbytes.github.io/HOLLOW/game/ in Quest Browser.
 3. Allow microphone (speech raises signature).
 4. MD states intent; Operator backbriefs first route.
 

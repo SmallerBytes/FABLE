@@ -2,21 +2,14 @@
 ### Game Design Document — Archive Reconstruction Edition
 
 ```
-PROPERTY OF FABLE DYNAMICS — APPLIED OPTICS DIVISION
-PROJECT HOLLOW / BUILD 0.7.2 / OCTOBER 1988
-TAPE 7 OF 9 — RECOVERED 2026, SUBLEVEL STORAGE, SITE C
+PROJECT HOLLOW — RD-9 BLACKOUT OPERATIONS
+PROJECT HOLLOW / BUILD 0.9.3 / BLACKOUT LOADOUT
 CLASSIFICATION: INTERNAL — DO NOT DUPLICATE
 ```
 
-> **Archivist's note (2026):** The following document was reconstructed from a
-> degraded design binder and the recovered source tape of *Project HOLLOW*, an
-> unreleased 1988 "ranging-display entertainment prototype" built by FABLE
-> Dynamics to demonstrate their experimental LiDAR visualization hardware to
-> military buyers. The demo was framed as a game so the rangefinder team could
-> stress-test the point-cloud display under "adversarial operator panic."
-> The project was cancelled after the October incident. This document specifies
-> the game completely; the accompanying build is a faithful, directly playable
-> reconstruction.
+> **Note:** This document specifies *Project HOLLOW*, an RD-9 LiDAR
+> cyber-infiltration prototype. The demo stresses the point-cloud display
+> under adversarial operator panic. The accompanying build is playable.
 
 ---
 
@@ -42,7 +35,7 @@ in the dark you yourself refuse to illuminate.
 - **Session length:** 15–35 minutes per run; designed for repeat attempts
 - **Platform (reconstruction):** Any modern browser, keyboard + mouse,
   zero external dependencies (single HTML file + scripts, vanilla WebGL/WebAudio)
-- **Fictional platform (1988):** FABLE RD-9 "ranging display" workstation,
+- **Fictional platform (1988):** HOLLOW RD-9 "ranging display" workstation,
   monochrome long-persistence phosphor CRT
 
 ### Design Pillars (in priority order)
@@ -65,7 +58,7 @@ in the dark you yourself refuse to illuminate.
 
 ### 2.1 Premise
 
-October 1988. FABLE Dynamics' Site C — a subterranean applied-optics research
+October 1988. Project HOLLOW Site C — a subterranean applied-optics research
 facility — went dark eleven days ago after a containment failure in the
 specimen wing. You are **Operator Wren Halse**, a field calibration technician
 sent down alone because you are the only person left who knows how to run the
@@ -84,7 +77,7 @@ had eleven silent days to learn that anything which clicks in the dark is food.
 All narrative is environmental and diegetic. There are no cutscenes.
 
 - **Boot sequence:** the game opens as the RD-9 powering on — self-test text,
-  a mission directive from FABLE Dynamics dispatch. This is the entire
+  a mission directive from HOLLOW dispatch. This is the entire
   explicit setup.
 - **Memo pickups (4):** scattered paper logs from Site C staff, painted as
   **cyan returns**. Walking over one displays its text on the CRT for a few
@@ -92,7 +85,7 @@ All narrative is environmental and diegetic. There are no cutscenes.
   double as soft tutorialization (memo 2 explicitly warns: *"it comes to the
   clicking"*).
 - **The ending:** reaching the energized exit rolls a terse epilogue:
-  Wren surfaces; FABLE Dynamics seals Site C; the final line implies the
+  Wren surfaces; Project HOLLOW seals Site C; the final line implies the
   Custodian was never the only specimen. Cut to the archive framing.
 - **Death:** the screen floods with red returns and static; the RD-9 "loses
   carrier" and reboots to the title. Death text varies slightly by how loud
