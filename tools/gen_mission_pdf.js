@@ -40,20 +40,21 @@ var tripLine = M.markers.lasers.map(function (L) {
 }).join('  ');
 
 var body = [
-  'HOLLOW — ENEMY C2 NODE — MISSION MAP',
-  'SOS Cyber Raid Exercise',
+  'HOLLOW — HOSTILE AI SITE — MISSION MAP',
+  'CYBER INFILTRATION / EMP BLACKOUT / CLONE AND CORRUPT',
   '',
   'START / INFIL: grid col ' + pCol + ', row ' + pRow + '  (ASCII character P)',
   'BLAST DOORS: ' + doorLine,
   'TRIPWIRES (T): ' + tripLine,
-  'INTENT: Keys → blast doors → jack-in → LZ extract before chopper departs.',
-  'Minimize emissions. One Faraday harbor in the start/infil room dampens signature. Two security units.',
+  'INTENT: Infiltrate blacked-out AI site. Keys → console → clone & corrupt → LZ extract.',
+  'EMP cut facility power. Operator maps with LiDAR; Wristlink radar tracks security.',
+  'Minimize emissions. One Faraday harbor in the start/infil room. Two security units.',
   '',
-  'LEGEND: # wall  . floor  S harbor  P START  D blast door  T tripwire  1-3 keys  G jack-in  X LZ  m intel  C security',
+  'LEGEND: # wall  . floor  S harbor  P START  D blast door  T tripwire  1-3 keys  G AI core  X LZ  m intel  C security',
   ''
 ].concat(rows).concat([
   '',
-  'Operator=VR. Mission Director=this map + voice. Wristlink = motion tracker.',
+  'Operator=VR (LiDAR + radar). Mission Director=this map + voice.',
   'After uplink: inbound then on-station window. Miss LZ = left behind.',
   'Full-color diagram: open game/map-print.html → Print → Save as PDF.'
 ]);
