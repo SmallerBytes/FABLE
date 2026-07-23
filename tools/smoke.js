@@ -22,16 +22,19 @@ var player = { x: M.markers.P.x, z: M.markers.P.z, yaw: 0 };
 var now = 0, dt = 1 / 60;
 
 console.log('initial state:', EN.state.state);
-if (EN.state.state !== 'DORMANT') throw new Error('should start DORMANT');
+if (EN.state.state !== 'PATROL') throw new Error('should start PATROL (active security)');
+var contacts = EN.contacts ? EN.contacts() : [];
+console.log('security units:', contacts.length);
+if (contacts.length !== 3) throw new Error('expected 3 security units');
 
-// 1) loud noise right next to the lair -> agitation -> wake
+// 1) loud noise right next to the lair -> agitation / investigate or chase
 for (var i = 0; i < 600; i++) {
   now += dt;
   if (i % 30 === 0) EN.hear(M.markers.C.x + 4, M.markers.C.z, 34, now, true);
   EN.update(dt, player, now, game);
 }
 console.log('after loud noise near lair:', EN.state.state, 'agitation', EN.state.agitation.toFixed(1));
-if (EN.state.state === 'DORMANT') throw new Error('should have woken');
+if (EN.state.state === 'DORMANT') throw new Error('should not be dormant');
 
 // 2) feed continuous player noise -> expect CHASE, expect approach
 var d0 = Math.hypot(EN.state.x - player.x, EN.state.z - player.z);

@@ -74,7 +74,7 @@
   var MEMO_TEXTS = [
     "OPS FRAGMENT — PRE-INFIL EMP DROPPED SITE POWER. FACILITY IS DARK. YOUR ONLY MAP IS THE RD-9 LiDAR GOGGLES. MOTION TRACKER ON THE WRISTLINK FLAGS SECURITY RETURNS.",
     "INTEL NOTE — HOSTILE AI CORE IS HOUSED BEHIND THE CONSOLE DOOR. ACCESS KEYS ARE SCATTERED ACROSS THE WING. ALL THREE REQUIRED FOR D3. OTHER BLAST DOORS ARE OPTIONAL SHORTCUTS.",
-    "MISSION ADDENDUM — AT THE CORE: CLONE THE MODEL TO OUR UPLINK, THEN CORRUPT THEIR LOCAL INSTANCE. AFTER UPLINK, LZ GOES HOT. MISS THE CHOPPER WINDOW AND YOU ARE LEFT BEHIND.",
+    "MISSION ADDENDUM — AT THE CORE: CLONE THE MODEL TO OUR UPLINK, THEN CORRUPT THEIR LOCAL INSTANCE. AFTER UPLINK, EXTRACT IS DARK ON LiDAR — MAP GUIDE CALLS THE PAD. MISS THE WINDOW AND YOU ARE LEFT BEHIND.",
     "THREAT PROFILE — SECURITY UNITS ARE BLIND IN THE BLACKOUT BUT ACOUSTICALLY SENSITIVE. EMISSIONS DRAW THEM. THE START ROOM FARADAY HARBOR DAMPENS YOUR SIGNATURE. TRIPWIRES ALARM THE GRID."
   ];
 
@@ -1016,28 +1016,8 @@
       }
     }
 
-    // chopper LZ beacon
-    if (exfilPhase === 'INBOUND' || exfilPhase === 'ON_STATION') {
-      beaconTimer -= dt;
-      if (beaconTimer <= 0) {
-        beaconTimer = exfilPhase === 'ON_STATION' ? 0.12 : 0.45;
-        var X = M.markers.X;
-        var flash = exfilPhase === 'ON_STATION' ? (Math.sin(now * 18) > 0) : (Math.sin(now * 4) > -0.2);
-        if (flash) {
-          var n = exfilPhase === 'ON_STATION' ? 70 : 35;
-          for (var b = 0; b < n; b++) {
-            var ang = math.rand() * Math.PI * 2;
-            var rr = Math.sqrt(math.rand()) * LZ_RADIUS;
-            R.addPoint(
-              X.x + Math.cos(ang) * rr,
-              0.05 + math.rand() * 0.35,
-              X.z + Math.sin(ang) * rr,
-              C_WHITE[0], C_WHITE[1], C_WHITE[2], now, BEACON_LIFE
-            );
-          }
-        }
-      }
-    }
+    // LZ is intentionally dark on LiDAR — Mission Director on the map guides extract.
+    // Boarding still happens when the operator reaches the pad during on-station.
 
     // auto-board if standing in LZ during on-station
     if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
@@ -1096,7 +1076,7 @@
           : btn + ' JACK INTO CORE';
       }
       if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS + 1)) {
-        hint = 'ENTER FLASHING LZ — BOARD NOW';
+        hint = 'EXTRACT ZONE — BOARD NOW';
       }
       for (i = 0; i < memos.length; i++) {
         if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
