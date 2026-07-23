@@ -19,8 +19,6 @@
   var SCAN_RANGE = 60;
   var INTERACT_RANGE = 2.4;
   var INTERACT_RANGE_VR = 4.2;
-  var MEMO_RANGE = 1.3;
-  var MEMO_RANGE_VR = 3.2;
   var VR_AIM_MAX = 5.5;
   var VR_AIM_DOT = 0.72;
   var gfxQuality = 'medium';
@@ -77,13 +75,6 @@
   var POW_FOLLOW_SPEED = 2.55;
   var POW_STOP_DIST = 1.25;
   var POW_RADIUS = 0.4;
-
-  var MEMO_TEXTS = [
-    "OPS FRAGMENT — PRE-INFIL EMP DROPPED SITE POWER. FACILITY IS DARK. YOUR ONLY MAP IS THE RD-9 LiDAR GOGGLES. MOTION TRACKER ON THE WRISTLINK FLAGS SECURITY RETURNS.",
-    "INTEL NOTE — HOSTILE AI CORE IS HOUSED BEHIND THE CONSOLE DOOR. ACCESS KEYS ARE SCATTERED ACROSS THE WING. ALL THREE REQUIRED FOR D3. OTHER BLAST DOORS ARE OPTIONAL SHORTCUTS.",
-    "MISSION ADDENDUM — PRIMARY OBJECTIVE AT THE CORE: CLONE THE MODEL TO HARD DRIVE. AFTER UPLINK THE LZ DOES NOT PAINT ON LiDAR — YOUR MAP GUIDE MUST VOICE YOU TO THE PAD BEFORE THE CHOPPER DEPARTS.",
-    "THREAT PROFILE — THREE SECURITY UNITS PATROL FROM INSERTION. THEY ARE BLIND IN THE BLACKOUT BUT ACOUSTICALLY SENSITIVE. EMISSIONS DRAW THEM. THE START ROOM FARADAY HARBOR DAMPENS YOUR SIGNATURE. TRIPWIRES ALARM THE GRID."
-  ];
 
   var BOOT_LINES = [
     "RD-9 RANGING PACKAGE — CYBER INFILTRATION LOADOUT",
@@ -160,7 +151,7 @@
   var vrScanOrigin = null, vrScanDirection = null;
   var trickleNoiseTimer = 0;
   var burst = { active: false, t: 0, cooldown: 0 };
-  var accessKeys = [], memos = [];
+  var accessKeys = [];
   var keysCollected = 0, doorsOpen = 0;
   var vrHudHint = '';
   var vrHudObj = '';
@@ -477,7 +468,6 @@
     player.x = M.markers.P.x; player.z = M.markers.P.z;
     player.yaw = 0; player.pitch = 0; player.eye = EYE_STAND;
     accessKeys = M.markers.fuses.map(function (f) { return { x: f.x, z: f.z, taken: false }; });
-    memos = M.markers.memos.map(function (m, i) { return { x: m.x, z: m.z, read: false, i: i }; });
     keysCollected = 0; doorsOpen = 0;
     uplinkDone = false;
     exfilPhase = 'NONE'; exfilTimer = 0;
@@ -894,15 +884,10 @@
       t = raySphere(ox, oy, oz, dx, dy, dz, ps[i]);
       if (t > 0 && t < bestT) { bestT = t; color = C_POW; life = ENEMY_POINT_LIFE; }
     }
-    // items
+    // items — access keys only (no memo/message orbs)
     for (i = 0; i < accessKeys.length; i++) {
       if (accessKeys[i].taken) continue;
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: accessKeys[i].x, y: 0.9, z: accessKeys[i].z, r: 0.45 });
-      if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
-    }
-    for (i = 0; i < memos.length; i++) {
-      if (memos[i].read) continue;
-      t = raySphere(ox, oy, oz, dx, dy, dz, { x: memos[i].x, y: 0.7, z: memos[i].z, r: 0.4 });
       if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
     }
     // locked blast doors — dark blue slab (also fills gaps if ray grazes)
@@ -1009,8 +994,6 @@
 
   function interactRange() { return inVR() ? INTERACT_RANGE_VR : INTERACT_RANGE; }
 
-  function memoRange() { return inVR() ? MEMO_RANGE_VR : MEMO_RANGE; }
-
   function near(x, z, range) {
     var dx = x - player.x, dz = z - player.z;
     return dx * dx + dz * dz < range * range;
@@ -1078,15 +1061,7 @@
     return m;
   }
 
-  function readMemo(i) {
-    if (memos[i].read) return false;
-    memos[i].read = true;
-    // No eventline dump — intel memos stay silent (map guide / discovery only)
-    if (A.fuseChime) A.fuseChime();
-    return true;
-  }
-
-  // Closest key/memo/door in front of the controller ray (VR-friendly pickup)
+  // Closest key/door in front of the controller ray (VR-friendly pickup)
   function vrAimPick() {
     if (!vrScanDirection) return null;
     var ox = player.x, oz = player.z;
@@ -1103,14 +1078,6 @@
       if (dist > VR_AIM_MAX) continue;
       dot = (tfx * dx + tfz * dz) / dist;
       if (dot >= bestDot) { bestDot = dot; best = { kind: 'key', i: i, dist: dist }; }
-    }
-    for (i = 0; i < memos.length; i++) {
-      if (memos[i].read) continue;
-      tfx = memos[i].x - ox; tfz = memos[i].z - oz;
-      dist = Math.sqrt(tfx * tfx + tfz * tfz);
-      if (dist > VR_AIM_MAX) continue;
-      dot = (tfx * dx + tfz * dz) / dist;
-      if (dot >= bestDot) { bestDot = dot; best = { kind: 'memo', i: i, dist: dist }; }
     }
     for (i = 0; i < M.markers.doors.length; i++) {
       if (!M.markers.doors[i].locked) continue;
@@ -1426,10 +1393,6 @@
         tryFreePow();
         return;
       }
-      if (pick && pick.kind === 'memo') {
-        readMemo(pick.i);
-        return;
-      }
       if (pick && pick.kind === 'key' && pick.dist <= range) {
         takeKey(pick.i);
         return;
@@ -1462,12 +1425,6 @@
       if (pick && pick.kind === 'console' && pick.dist <= range + 1.2) {
         tryJackIn();
         return;
-      }
-    }
-
-    for (var m = 0; m < memos.length; m++) {
-      if (!memos[m].read && near(memos[m].x, memos[m].z, memoRange())) {
-        if (readMemo(m)) return;
       }
     }
 
@@ -1553,13 +1510,6 @@
   }
 
   function updateItems(dt) {
-    // memos auto-read on walk-over
-    for (var i = 0; i < memos.length; i++) {
-      if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
-        readMemo(i);
-      }
-    }
-
     // LZ has no LiDAR beacon — Mission Director must voice-guide the operator
     // auto-board if standing in LZ during on-station
     if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
@@ -1572,6 +1522,7 @@
       var hint = '';
       var hintRange = inVR() ? INTERACT_RANGE_VR : INTERACT_RANGE;
       var btn = inVR() ? '[A/X]' : '[E]';
+      var i;
       if (missionBranch === 'RESCUE' && pow && !pow.freed && near(pow.x, pow.z, hintRange + 0.5)) {
         hint = btn + ' FREE POW';
       } else if (missionBranch === 'RESCUE' && pow && pow.freed && near(pow.x, pow.z, hintRange)) {
@@ -1597,8 +1548,6 @@
               ? btn + ' OPEN CONSOLE DOOR'
               : btn + ' UNLOCK BLAST DOOR';
           }
-        } else if (aim && aim.kind === 'memo' && aim.dist <= memoRange() + 0.4) {
-          // silent pickup — no hint text
         }
       }
       for (i = 0; i < accessKeys.length; i++) {
@@ -1633,11 +1582,6 @@
         if (missionBranch === 'RESCUE') hint = 'ON THE PAD — POW MUST BOARD WITH YOU';
         else if (missionBranch === 'VIRUS' && !virusDone) hint = 'VIRUS INCOMPLETE — RETURN TO CONSOLE';
         else hint = 'ON THE PAD — HOLD FOR EXTRACT';
-      }
-      for (i = 0; i < memos.length; i++) {
-        if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
-          // silent — no eventline / hint dump
-        }
       }
       vrHudHint = hint;
       if (hint) { el.eventline.textContent = hint; el.eventline.className = ''; }
