@@ -202,7 +202,7 @@
     ctx.fillStyle = '#3f8a55';
     ctx.font = '11px Consolas, monospace';
     if (inVR()) {
-      ctx.fillText('STICK MOVE · A/X ROTATE · TRIGGER = NEXT · CALL TILE IDs (A1…F6)', canvas.width / 2, 42);
+      ctx.fillText('POINT LASER · A/X OR TRIGGER ROTATE · STICK ALSO WORKS · TILE IDs A1…F6', canvas.width / 2, 42);
     } else {
       ctx.fillText('CLICK TO ROTATE — CONNECT ENTRY → CORE · TILE IDs A1…F6', canvas.width / 2, 42);
     }
@@ -332,6 +332,22 @@
     render();
   }
 
+  function pickUv(u, v) {
+    if (!active || !canvas) return -1;
+    var x = u * canvas.width;
+    var y = v * canvas.height;
+    var c = Math.floor((x - PAD) / CELL);
+    var r = Math.floor((y - TOP) / CELL);
+    if (c < 0 || r < 0 || c >= SIZE || r >= SIZE) return -1;
+    var i = idx(c, r);
+    if (i !== selected) {
+      selected = i;
+      confirmHold = 0;
+      render();
+    }
+    return i;
+  }
+
   function open(successCb, timeoutCb) {
     ensureCanvas();
     resetPuzzle();
@@ -366,7 +382,7 @@
 
   NS.circuit = {
     open: open, close: close, update: update, rotateSelected: rotateSelected,
-    moveSelection: moveSelection, nextTile: nextTile,
+    moveSelection: moveSelection, nextTile: nextTile, pickUv: pickUv,
     isActive: function () { return active; },
     getCanvas: function () { return canvas; },
     getSheetData: getSheetData,

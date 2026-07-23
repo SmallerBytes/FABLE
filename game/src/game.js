@@ -68,6 +68,7 @@
 
   var CHOPPER_INBOUND_S = 40;
   var CHOPPER_LINGER_S = 25;
+  var MISSION_TIME_S = 8 * 60; // power returns — hard fail
   var LZ_RADIUS = 3.5;
   var NOISE_UPLINK = 40;
   var NOISE_VIRUS = 28;
@@ -97,7 +98,7 @@
     "PRE-RAID EMP HAS CUT POWER. FACILITY IS DARK.",
     "",
     "MISSION: INFILTRATE. REACH THE AI CORE. CLONE THE MODEL.",
-    "         EXFIL BEFORE THE EXTRACT WINDOW CLOSES.",
+    "         EXFIL BEFORE POWER RETURNS (8:00 BLACKOUT WINDOW).",
     "",
     "TOOLS: LiDAR MAPS THE DARK. WRIST RADAR TRACKS SECURITY.",
     "EMCON: MINIMIZE EMISSIONS. THEY HEAR WHAT YOU LIGHT."
@@ -135,7 +136,8 @@
   var CLONE_INTEL =
     "CLONE COMPLETE.\n\n" +
     "FLASH TRAFFIC: POSSIBLE POW HELD WEST OF THE CORE WING.\n" +
-    "DARK-GREEN LiDAR RETURN AFTER FREE. ESCORT TO LZ.\n\n" +
+    "SCAN WITH LiDAR — THE POW PAINTS GREEN.\n" +
+    "Free them, then escort to the LZ.\n\n" +
     "ALTERNATE: REMAIN AT CONSOLE. PLANT VIRUS.\n" +
     "WHEN THEIR MAINFRAME WAKES, YOU OWN THE STACK.\n\n" +
     "ONE PATH ONLY. CHOPPER CLOCK STARTS ON CONFIRM.";
@@ -189,6 +191,8 @@
   var clickTickFade = 0;
   var laserCooldown = {};
   var CIR = null;
+  var missionWarnAt = { m2: false, m1: false, s30: false };
+  var circuitPanelModel = null; // last VR panel matrix for laser pick
 
   // typewriter event line
   var msgQueue = [], curMsg = null, msgChars = 0, msgHold = 0;
@@ -488,8 +492,10 @@
     floodLevel = 0; runTime = 0; deathCause = 'quiet';
     glitchLevel = 0; glitchPop = 0; popTimer = 5;
     laserCooldown = {};
+    missionWarnAt = { m2: false, m1: false, s30: false };
+    circuitPanelModel = null;
     msgQueue = []; curMsg = null;
-    queueMsg('RD-9 RAID OVERLAY ACTIVE. MINIMIZE EMISSIONS.', '');
+    queueMsg('RD-9 RAID OVERLAY ACTIVE. BLACKOUT WINDOW: 8:00.', '');
   }
 
   function onKill() {
@@ -540,6 +546,49 @@
     showScreen('death');
     if (A.stopAllTransient) {
       setTimeout(function () { if (A.stopAllTransient) A.stopAllTransient(); }, 2500);
+    }
+  }
+
+  function failPowerReturn() {
+    if (state !== 'PLAY') return;
+    runActive = false;
+    state = 'LEFT';
+    exfilPhase = 'GONE';
+    clonePhase = 'DONE';
+    if (CIR) CIR.close();
+    if (A.sting) A.sting(false);
+    if (A.chopperStop) A.chopperStop();
+    if (A.securityAlarm) A.securityAlarm();
+    document.exitPointerLock();
+    if (VR.active()) VR.end();
+    el.epitaph.textContent = 'SITE POWER RESTORED. BLACKOUT ENDED. YOU ARE EXPOSED.';
+    $('death-screen').querySelector('h1').textContent = 'POWER ONLINE';
+    showScreen('death');
+    if (A.stopAllTransient) {
+      setTimeout(function () { if (A.stopAllTransient) A.stopAllTransient(); }, 2500);
+    }
+  }
+
+  function missionTimeLeft() {
+    return Math.max(0, MISSION_TIME_S - runTime);
+  }
+
+  function updateMissionClock(dt) {
+    if (state !== 'PLAY' || !runActive) return;
+    var left = missionTimeLeft();
+    if (left <= 0) {
+      failPowerReturn();
+      return;
+    }
+    if (!missionWarnAt.m2 && left <= 120) {
+      missionWarnAt.m2 = true;
+      queueMsg('POWER RETURN T-2:00 — MOVE', 'amber', 4);
+    } else if (!missionWarnAt.m1 && left <= 60) {
+      missionWarnAt.m1 = true;
+      queueMsg('POWER RETURN T-1:00', 'red', 4);
+    } else if (!missionWarnAt.s30 && left <= 30) {
+      missionWarnAt.s30 = true;
+      queueMsg('POWER RETURN T-0:30 — FINAL', 'red', 3);
     }
   }
 
@@ -1119,7 +1168,7 @@
     if (missionBranch === 'RESCUE') {
       pushMsg(pow && pow.freed
         ? 'PATH LOCKED — ESCORT POW TO LZ'
-        : 'PATH LOCKED — FREE THE POW (DARK GREEN)', 'amber');
+        : 'PATH LOCKED — FREE THE POW (GREEN ON LiDAR SCAN)', 'amber');
       return;
     }
     if (uplinkDone) {
@@ -1163,7 +1212,7 @@
     pow.freed = true;
     emitNoise(NOISE_INTERACT * 0.7);
     if (A.fuseChime) A.fuseChime();
-    pushMsg('POW FREED — ESCORT TO LZ · DARK GREEN ON LiDAR', 'amber', 4);
+    pushMsg('POW FREED — GREEN ON LiDAR SCAN · ESCORT TO LZ', 'amber', 4);
     return true;
   }
 
@@ -1279,7 +1328,73 @@
     m[4] = up[0] * sy2; m[5] = up[1] * sy2; m[6] = up[2] * sy2; m[7] = 0;
     m[8] = nx; m[9] = ny; m[10] = nz; m[11] = 0;
     m[12] = px; m[13] = py; m[14] = pz; m[15] = 1;
+    circuitPanelModel = m;
     return m;
+  }
+
+  function worldAimFromVr(vrInput) {
+    if (!vrInput || !vrInput.aimOrigin || !vrInput.aimDirection) return null;
+    var c = Math.cos(vrInput.bodyYaw), s = Math.sin(vrInput.bodyYaw);
+    var o = vrInput.aimOrigin;
+    return {
+      x: player.x + c * o.localX - s * o.localZ,
+      y: VR.worldYFromXR ? VR.worldYFromXR(o.y) : o.y,
+      z: player.z + s * o.localX + c * o.localZ,
+      dx: vrInput.aimDirection[0],
+      dy: vrInput.aimDirection[1],
+      dz: vrInput.aimDirection[2]
+    };
+  }
+
+  // Ray vs circuit panel quad → UV in [0,1]. Returns {u,v,hx,hy,hz,t} or null.
+  function rayCircuitPanel(ox, oy, oz, dx, dy, dz, m) {
+    if (!m) return null;
+    var cx = m[12], cy = m[13], cz = m[14];
+    var nx = m[8], ny = m[9], nz = m[10];
+    var denom = nx * dx + ny * dy + nz * dz;
+    if (Math.abs(denom) < 1e-5) return null;
+    var t = ((cx - ox) * nx + (cy - oy) * ny + (cz - oz) * nz) / denom;
+    if (t < 0.05 || t > 4.5) return null;
+    var hx = ox + dx * t, hy = oy + dy * t, hz = oz + dz * t;
+    var rx = m[0], ry = m[1], rz = m[2];
+    var ux = m[4], uy = m[5], uz = m[6];
+    var sx2 = rx * rx + ry * ry + rz * rz;
+    var sy2 = ux * ux + uy * uy + uz * uz;
+    if (sx2 < 1e-8 || sy2 < 1e-8) return null;
+    var lx = ((hx - cx) * rx + (hy - cy) * ry + (hz - cz) * rz) / sx2; // ~[-0.5,0.5]
+    var ly = ((hx - cx) * ux + (hy - cy) * uy + (hz - cz) * uz) / sy2;
+    if (lx < -0.52 || lx > 0.52 || ly < -0.52 || ly > 0.52) return null;
+    return { u: lx + 0.5, v: 0.5 - ly, hx: hx, hy: hy, hz: hz, t: t };
+  }
+
+  function paintControllerLaser(ox, oy, oz, hx, hy, hz, hit) {
+    var dx = hx - ox, dy = hy - oy, dz = hz - oz;
+    var len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (len < 0.01) return;
+    var n = Math.max(10, Math.min(48, Math.floor(len * 28)));
+    var life = 0.07;
+    for (var i = 0; i <= n; i++) {
+      var f = i / n;
+      R.addPoint(
+        ox + dx * f, oy + dy * f, oz + dz * f,
+        1.0, hit ? 0.12 : 0.35, hit ? 0.12 : 0.35, now, life
+      );
+    }
+    R.addPoint(hx, hy, hz, 1.0, hit ? 0.05 : 0.4, hit ? 0.05 : 0.4, now, 0.1);
+  }
+
+  function handleCircuitLaser(vrInput) {
+    var aim = worldAimFromVr(vrInput);
+    if (!aim || !circuitPanelModel) return;
+    var hit = rayCircuitPanel(aim.x, aim.y, aim.z, aim.dx, aim.dy, aim.dz, circuitPanelModel);
+    var endX = aim.x + aim.dx * 1.6;
+    var endY = aim.y + aim.dy * 1.6;
+    var endZ = aim.z + aim.dz * 1.6;
+    if (hit) {
+      endX = hit.hx; endY = hit.hy; endZ = hit.hz;
+      if (CIR.pickUv) CIR.pickUv(hit.u, hit.v);
+    }
+    paintControllerLaser(aim.x, aim.y, aim.z, endX, endY, endZ, !!hit);
   }
 
   function syncCircuitPanel() {
@@ -1287,6 +1402,7 @@
     if (CIR && CIR.isActive() && inVR() && CIR.getCanvas) {
       R.setCircuitPanel(CIR.getCanvas(), buildCircuitModel());
     } else {
+      circuitPanelModel = null;
       R.setCircuitPanel(null, null);
     }
   }
@@ -1644,11 +1760,19 @@
 
   function updateHUD(dt) {
     runTime += dt;
-    var totalSec = Math.floor(runTime);
+    updateMissionClock(0); // warnings use runTime; fail checked below
+    var left = missionTimeLeft();
+    if (state === 'PLAY' && runActive && left <= 0) {
+      failPowerReturn();
+      return;
+    }
+    var totalSec = Math.floor(left);
     var mm = Math.floor(totalSec / 60), ss = totalSec % 60;
-    el.timer.textContent = 'T+' + pad(mm, 2) + ':' + pad(ss, 2);
-    var hh = Math.floor(totalSec / 3600);
-    el.vcrClock.textContent = 'T+' + pad(hh, 2) + ':' + pad(mm % 60, 2) + ':' + pad(ss, 2);
+    el.timer.textContent = 'PWR T-' + pad(mm, 2) + ':' + pad(ss, 2);
+    var elapsed = Math.floor(runTime);
+    var eh = Math.floor(elapsed / 3600);
+    var em = Math.floor((elapsed % 3600) / 60), es = elapsed % 60;
+    el.vcrClock.textContent = 'T+' + pad(eh, 2) + ':' + pad(em, 2) + ':' + pad(es, 2);
     el.pts.textContent = 'PTS ' + pad(R.pointCount(), 6) + ' / ' + R.CAPACITY;
 
     var charge = burst.active ? 0 : (1 - Math.max(0, burst.cooldown) / BURST_COOLDOWN);
@@ -1771,21 +1895,25 @@
 
       if (CIR && CIR.isActive()) {
         if (vrInput) {
+          syncCircuitPanel();
+          handleCircuitLaser(vrInput);
           if (vrInput.navX) CIR.moveSelection(vrInput.navX, 0);
           if (vrInput.navY) CIR.moveSelection(0, vrInput.navY);
           if (vrInput.interactPressed) CIR.rotateSelected();
           if (vrInput.burstPressed && CIR.nextTile) CIR.nextTile();
-          if (vrInput.tricklePressed && CIR.nextTile) CIR.nextTile();
+          if (vrInput.tricklePressed) CIR.rotateSelected();
           if (R.setWristModel) {
             R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
           }
+        } else {
+          syncCircuitPanel();
         }
         CIR.update(dt);
-        syncCircuitPanel();
+        if (inVR()) syncCircuitPanel();
         updateExfil(dt);
         updateMsg(dt);
         updateHUD(dt);
-        vrHudHint = 'STICK: MOVE TILE · A/X: ROTATE · ROUTE ENTRY→CORE';
+        vrHudHint = 'POINT LASER AT TILE · A/X OR TRIGGER: ROTATE · STICK ALSO WORKS';
       } else if (cloneUiActive()) {
         if (vrInput && R.setWristModel) {
           R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
