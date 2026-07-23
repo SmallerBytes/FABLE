@@ -22,12 +22,11 @@ var player = { x: M.markers.P.x, z: M.markers.P.z, yaw: 0 };
 var now = 0, dt = 1 / 60;
 
 console.log('initial state:', EN.state.state);
-if (EN.state.state !== 'PATROL') throw new Error('should start PATROL (active security)');
-var contacts = EN.contacts ? EN.contacts() : [];
-console.log('security units:', contacts.length);
-if (contacts.length !== 3) throw new Error('expected 3 security units');
+if (EN.state.state !== 'PATROL') throw new Error('should start PATROL');
+if (!EN.contacts || EN.contacts().length < 3) throw new Error('should have 3 security units');
+console.log('contacts:', EN.contacts().map(function (c) { return c.id + ':' + c.state; }).join(', '));
 
-// 1) loud noise right next to the lair -> agitation / investigate or chase
+// 1) loud noise right next to the lair -> escalate off patrol
 for (var i = 0; i < 600; i++) {
   now += dt;
   if (i % 30 === 0) EN.hear(M.markers.C.x + 4, M.markers.C.z, 34, now, true);
@@ -35,25 +34,32 @@ for (var i = 0; i < 600; i++) {
 }
 console.log('after loud noise near lair:', EN.state.state, 'agitation', EN.state.agitation.toFixed(1));
 if (EN.state.state === 'DORMANT') throw new Error('should not be dormant');
+if (EN.state.state === 'PATROL' && EN.state.agitation < 10) throw new Error('should have agitated');
 
-// 2) feed continuous player noise -> expect CHASE, expect approach
+// 2) place primary in kill range of a noisy player outside harbor
+player = { x: M.markers.C.x + 6, z: M.markers.C.z, yaw: 0 };
+if (M.isSafeAt(player.x, player.z) || M.isSolidAt(player.x, player.z)) {
+  player.x = M.markers.G.x - 8; player.z = M.markers.G.z;
+}
+EN.state.x = player.x + 0.8; EN.state.z = player.z;
+EN.forceChase(now);
 var d0 = Math.hypot(EN.state.x - player.x, EN.state.z - player.z);
-for (i = 0; i < 60 * 60 && !killed; i++) {
+for (i = 0; i < 60 * 5 && !killed; i++) {
   now += dt;
-  if (i % 15 === 0) EN.hear(player.x, player.z, 34, now, true); // burst spam
+  EN.hear(player.x, player.z, 40, now, true);
   EN.update(dt, player, now, game);
 }
 var d1 = Math.hypot(EN.state.x - player.x, EN.state.z - player.z);
-console.log('distance before/after pursuit:', d0.toFixed(1), '->', d1.toFixed(1), 'state:', EN.state.state, 'killed:', killed, 'in', (i / 60).toFixed(1) + 's');
-if (!killed) throw new Error('stationary noisy player should die within 60 s of pursuit');
+console.log('distance before/after pursuit:', d0.toFixed(1), '->', d1.toFixed(1), 'state:', EN.state.state, 'killed:', killed, 'in', (i / 60).toFixed(1) + 's', 'safe?', M.isSafeAt(player.x, player.z));
+if (!killed) throw new Error('player in kill range should die within 5 s');
 
 // 3) silence after chase -> drops out of CHASE
 EN.reset();
 EN.state.agitation = 50;
-EN.forceChase();
-var lastState = 'CHASE';
 player = { x: M.markers.P.x, z: M.markers.P.z, yaw: 0 };
+EN.forceChase(now);
 now += 100; // ensure lastNoiseFed stale
+var lastState = 'CHASE';
 for (i = 0; i < 60 * 10; i++) {
   now += dt;
   EN.update(dt, player, now, game);

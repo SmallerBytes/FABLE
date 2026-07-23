@@ -40,27 +40,27 @@
   var bodyCache = null;
   var skipX = 0, skipZ = 0, skipTimer = 0;
 
-  // Extra security units (independent stalkers)
-  var secondaries = [];
-
-  function makeSecondary(lx, lz, click0, speedMul) {
+  // Secondary security units (independent stalkers)
+  function makeUnit(lairX, lairZ, clickBias) {
     return {
-      x: lx, z: lz, lairX: lx, lairZ: lz,
-      state: 'PATROL', agitation: 0, agitationFloor: 0,
+      x: lairX, z: lairZ, state: 'PATROL', agitation: 0, agitationFloor: 0,
       path: null, pathIdx: 0, repathTimer: 0,
-      lastNoiseFed: -999, lastKnownX: 0, lastKnownZ: 0,
-      clickTimer: click0, stepDist: 0, wakeTimer: 0,
+      lastNoiseFed: -999, lastKnownX: lairX, lastKnownZ: lairZ,
+      clickTimer: clickBias, stepDist: 0, wakeTimer: 0,
       facing: 0, animT: 0, bodyCache: null,
-      speedMul: speedMul || 0.95
+      lairX: lairX, lairZ: lairZ
     };
   }
+  var B = makeUnit(4.5, 4.5, 2.0);
+  var C = makeUnit(106.5, 28.5, 2.8);
+  var SECONDARIES = [B, C];
 
   function reset() {
     M = NS.map; math = NS.math;
     lairX = M.markers.C.x; lairZ = M.markers.C.z;
     E.x = lairX; E.z = lairZ;
     E.state = 'PATROL';
-    E.agitation = 0;
+    E.agitation = 12;
     E.agitationFloor = 0;
     path = null; pathIdx = 0; repathTimer = 0;
     investigateTarget = null; dwellTimer = 0;
@@ -71,11 +71,24 @@
     facing = 0; animT = 0; bodyCache = null;
     skipX = 0; skipZ = 0; skipTimer = 0;
 
-    // Three units active from infil: lair + north wing + mid-east
-    secondaries = [
-      makeSecondary(4.5, 4.5, 2.4, 0.95),
-      makeSecondary(100, 55, 2.8, 0.9)
-    ];
+    // Three units active from the start — spread across the site
+    B.lairX = 4.5; B.lairZ = 4.5;
+    B.x = B.lairX; B.z = B.lairZ;
+    B.state = 'PATROL';
+    B.agitation = 8; B.agitationFloor = 0;
+    B.path = null; B.pathIdx = 0; B.repathTimer = 0;
+    B.lastNoiseFed = -999;
+    B.clickTimer = 2.4; B.stepDist = 0; B.wakeTimer = 0;
+    B.facing = 0; B.animT = 0; B.bodyCache = null;
+
+    C.lairX = 106.5; C.lairZ = 28.5;
+    C.x = C.lairX; C.z = C.lairZ;
+    C.state = 'PATROL';
+    C.agitation = 8; C.agitationFloor = 0;
+    C.path = null; C.pathIdx = 0; C.repathTimer = 0;
+    C.lastNoiseFed = -999;
+    C.clickTimer = 2.8; C.stepDist = 0; C.wakeTimer = 0;
+    C.facing = 0; C.animT = 0; C.bodyCache = null;
   }
 
   function setPathTo(x, z) {
@@ -90,6 +103,7 @@
 
   // Perceived loudness model (GDD §3.4 / §5.1)
   function hear(x, z, loud, now, isPlayerNoise) {
+    // Player noise from inside a safe harbor is heavily attenuated (EMCON)
     if (isPlayerNoise && M.isSafeAt(x, z)) {
       loud *= 0.15;
     }
@@ -97,66 +111,67 @@
     var dist = Math.sqrt(dx * dx + dz * dz);
     var walls = M.wallsBetween(E.x, E.z, x, z);
     var effective = loud * Math.pow(WALL_ATTEN, walls) - dist;
-    if (effective <= 0) {
-      // still try secondaries with original loudness scaled
-    } else {
-      var conf = Math.min(1, effective / Math.max(loud, 0.01) + 0.15);
-      E.agitation = Math.min(100, E.agitation + effective * 0.9);
+    if (effective <= 0) return;
+    var conf = Math.min(1, effective / Math.max(loud, 0.01) + 0.15);
+    E.agitation = Math.min(100, E.agitation + effective * 0.9);
 
-      if (E.state !== 'DORMANT') {
-        if (isPlayerNoise) lastNoiseFed = now;
-        if (isPlayerNoise && M.isSafeAt(x, z)) {
-          if (E.state !== 'CHASE') {
-            E.state = 'INVESTIGATE';
-            investigateTarget = { x: x, z: z };
-            dwellTimer = 0;
-            setPathTo(x, z);
-          }
-        } else if (conf >= CHASE_CONF && !mustInvestigateAfterChase && E.state !== 'CHASE') {
-          enterChase();
-        } else if (E.state !== 'CHASE') {
+    if (E.state !== 'DORMANT') {
+      if (isPlayerNoise) lastNoiseFed = now;
+
+      // Inside sanctuary: never escalate to CHASE from hearing alone
+      if (isPlayerNoise && M.isSafeAt(x, z)) {
+        if (E.state !== 'CHASE') {
           E.state = 'INVESTIGATE';
           investigateTarget = { x: x, z: z };
           dwellTimer = 0;
           setPathTo(x, z);
-        } else {
-          lastKnownX = x; lastKnownZ = z;
         }
+      } else if (conf >= CHASE_CONF && !mustInvestigateAfterChase && E.state !== 'CHASE') {
+        enterChase();
+      } else if (E.state !== 'CHASE') {
+        E.state = 'INVESTIGATE';
+        investigateTarget = { x: x, z: z };
+        dwellTimer = 0;
+        setPathTo(x, z);
+      } else {
+        // already chasing: refresh last known contact
+        lastKnownX = x; lastKnownZ = z;
       }
     }
 
-    for (var si = 0; si < secondaries.length; si++) {
-      hearUnit(secondaries[si], x, z, loud * (0.85 - si * 0.05), now, isPlayerNoise);
+    // Secondary units also hear (slightly less sensitive)
+    for (var si = 0; si < SECONDARIES.length; si++) {
+      hearUnit(SECONDARIES[si], x, z, loud * (0.85 - si * 0.05), now, isPlayerNoise);
     }
   }
 
-  function hearUnit(u, x, z, loud, now, isPlayerNoise) {
+  function hearUnit(U, x, z, loud, now, isPlayerNoise) {
     if (isPlayerNoise && M.isSafeAt(x, z)) loud *= 0.15;
-    var dx = x - u.x, dz = z - u.z;
+    var dx = x - U.x, dz = z - U.z;
     var dist = Math.sqrt(dx * dx + dz * dz);
-    var walls = M.wallsBetween(u.x, u.z, x, z);
+    var walls = M.wallsBetween(U.x, U.z, x, z);
     var effective = loud * Math.pow(WALL_ATTEN, walls) - dist;
     if (effective <= 0) return;
     var conf = Math.min(1, effective / Math.max(loud, 0.01) + 0.15);
-    u.agitation = Math.min(100, u.agitation + effective * 0.85);
-    if (u.state === 'DORMANT') return;
-    if (isPlayerNoise) u.lastNoiseFed = now;
+    U.agitation = Math.min(100, U.agitation + effective * 0.85);
+    if (U.state === 'DORMANT') return;
+    if (isPlayerNoise) U.lastNoiseFed = now;
     if (isPlayerNoise && M.isSafeAt(x, z)) {
-      if (u.state !== 'CHASE') {
-        u.state = 'INVESTIGATE';
-        u.path = M.astar(u.x, u.z, x, z); u.pathIdx = 0;
+      if (U.state !== 'CHASE') {
+        U.state = 'INVESTIGATE';
+        U.path = M.astar(U.x, U.z, x, z); U.pathIdx = 0;
       }
       return;
     }
-    if (conf >= CHASE_CONF && u.state !== 'CHASE') {
-      u.state = 'CHASE';
-      u.repathTimer = 0;
-      u.lastKnownX = x; u.lastKnownZ = z;
-    } else if (u.state !== 'CHASE') {
-      u.state = 'INVESTIGATE';
-      u.path = M.astar(u.x, u.z, x, z); u.pathIdx = 0;
+    if (conf >= CHASE_CONF && U.state !== 'CHASE') {
+      U.state = 'CHASE';
+      U.repathTimer = 0;
+      U.lastKnownX = x; U.lastKnownZ = z;
+    } else if (U.state !== 'CHASE') {
+      U.state = 'INVESTIGATE';
+      U.path = M.astar(U.x, U.z, x, z); U.pathIdx = 0;
     } else {
-      u.lastKnownX = x; u.lastKnownZ = z;
+      U.lastKnownX = x; U.lastKnownZ = z;
     }
   }
 
@@ -184,6 +199,11 @@
     E.state = 'CHASE';
     repathTimer = 0;
     NS.audio.sting(true);
+  }
+  function forceChase(now) {
+    mustInvestigateAfterChase = false;
+    if (typeof now === 'number') lastNoiseFed = now;
+    enterChase();
   }
   function leaveChase(toInvestigateAt) {
     NS.audio.sting(false);
@@ -360,8 +380,8 @@
     NS.audio.setBreath(Math.max(0, (14 - au.dist) / 14) * 0.18 * au.atten * 8, au.pan);
 
     bodyCache = buildBody(dt);
-    for (var si = 0; si < secondaries.length; si++) {
-      updateSecondary(secondaries[si], dt, p, now, game);
+    for (var ui = 0; ui < SECONDARIES.length; ui++) {
+      updateSecondary(SECONDARIES[ui], dt, p, now, game, 0.92 - ui * 0.04);
     }
   }
 
@@ -384,91 +404,96 @@
     return false;
   }
 
-  function updateSecondary(u, dt, p, now, game) {
-    var mul = u.speedMul || 0.95;
-    u.agitation = Math.max(u.agitationFloor, u.agitation - AGITATION_DECAY * dt);
-    u.animT += dt;
-    var dx = p.x - u.x, dz = p.z - u.z;
+  function updateSecondary(U, dt, p, now, game, speedScale) {
+    speedScale = speedScale || 0.95;
+    U.agitation = Math.max(U.agitationFloor, U.agitation - AGITATION_DECAY * dt);
+    U.animT += dt;
+    var dx = p.x - U.x, dz = p.z - U.z;
     var dist = Math.sqrt(dx * dx + dz * dz);
     var playerSafe = M.isSafeAt(p.x, p.z);
 
-    if (dist < TOUCH_RANGE && u.state !== 'DORMANT' && !playerSafe) {
-      u.lastNoiseFed = now;
-      u.lastKnownX = p.x; u.lastKnownZ = p.z;
-      if (u.state !== 'CHASE') u.state = 'CHASE';
+    if (dist < TOUCH_RANGE && U.state !== 'DORMANT' && !playerSafe) {
+      U.lastNoiseFed = now;
+      U.lastKnownX = p.x; U.lastKnownZ = p.z;
+      if (U.state !== 'CHASE') U.state = 'CHASE';
     }
-    if (dist < KILL_RANGE && u.state !== 'DORMANT' && !playerSafe) {
+    if (dist < KILL_RANGE && U.state !== 'DORMANT' && !playerSafe) {
       game.onKill();
       return;
     }
-    if (u.state === 'CHASE' && playerSafe) {
-      u.state = 'INVESTIGATE';
-      u.path = M.astar(u.x, u.z, p.x, p.z); u.pathIdx = 0;
+    if (U.state === 'CHASE' && playerSafe) {
+      U.state = 'INVESTIGATE';
+      U.path = M.astar(U.x, U.z, p.x, p.z); U.pathIdx = 0;
     }
 
     var speed = 0;
-    switch (u.state) {
+    switch (U.state) {
       case 'DORMANT':
-        u.wakeTimer += dt;
-        if (u.agitation > DORMANT_WAKE || u.wakeTimer > 90) {
-          u.state = 'PATROL';
-          u.path = null;
+        U.wakeTimer += dt;
+        if (U.agitation > DORMANT_WAKE || U.wakeTimer > 90) {
+          U.state = 'PATROL';
+          U.path = null;
         }
         break;
       case 'PATROL':
-        speed = SPEED_PATROL * mul;
-        if (!u.path || u.pathIdx >= u.path.length) {
+        speed = SPEED_PATROL * speedScale;
+        if (!U.path || U.pathIdx >= U.path.length) {
           var t = pickPatrolTarget(p);
-          if (t) { u.path = M.astar(u.x, u.z, t.x, t.z); u.pathIdx = 0; }
+          if (t) { U.path = M.astar(U.x, U.z, t.x, t.z); U.pathIdx = 0; }
         }
-        followPathUnit(u, dt, speed);
+        followPathUnit(U, dt, speed);
         break;
       case 'INVESTIGATE':
-        speed = SPEED_INVESTIGATE * mul;
-        if (!u.path) { u.path = M.astar(u.x, u.z, p.x, p.z); u.pathIdx = 0; }
-        if (followPathUnit(u, dt, speed)) {
-          u.state = 'PATROL';
-          u.path = null;
+        speed = SPEED_INVESTIGATE * speedScale;
+        if (!U.path) { U.path = M.astar(U.x, U.z, p.x, p.z); U.pathIdx = 0; }
+        if (followPathUnit(U, dt, speed)) {
+          U.state = 'PATROL';
+          U.path = null;
         }
         break;
       case 'CHASE':
-        speed = SPEED_CHASE * mul * 0.97;
-        u.repathTimer -= dt;
-        var fed = (now - u.lastNoiseFed) < CHASE_LOSE_S;
-        if (fed && u.repathTimer <= 0) {
-          u.lastKnownX = p.x; u.lastKnownZ = p.z;
-          u.path = M.astar(u.x, u.z, p.x, p.z); u.pathIdx = 0;
-          u.repathTimer = 0.45;
+        speed = SPEED_CHASE * (speedScale - 0.03);
+        U.repathTimer -= dt;
+        var fed = (now - U.lastNoiseFed) < CHASE_LOSE_S;
+        if (fed && U.repathTimer <= 0) {
+          U.lastKnownX = p.x; U.lastKnownZ = p.z;
+          U.path = M.astar(U.x, U.z, p.x, p.z); U.pathIdx = 0;
+          U.repathTimer = 0.45;
         }
-        followPathUnit(u, dt, speed);
+        followPathUnit(U, dt, speed);
         if (!fed) {
-          u.state = 'INVESTIGATE';
-          u.path = M.astar(u.x, u.z, u.lastKnownX, u.lastKnownZ); u.pathIdx = 0;
+          U.state = 'INVESTIGATE';
+          U.path = M.astar(U.x, U.z, U.lastKnownX, U.lastKnownZ); U.pathIdx = 0;
         }
         break;
     }
 
-    var walls = M.wallsBetween(u.x, u.z, p.x, p.z);
+    var walls = M.wallsBetween(U.x, U.z, p.x, p.z);
     var atten = Math.pow(WALL_ATTEN, walls) / (1 + dist * 0.16);
-    var ang = Math.atan2(u.x - p.x, -(u.z - p.z));
+    var ang = Math.atan2(U.x - p.x, -(U.z - p.z));
     var pan = Math.sin(ang - p.yaw);
-    if (u.stepDist > (speed > 5 ? 1.4 : 2.0)) {
-      u.stepDist = 0;
+    if (U.stepDist > (speed > 5 ? 1.4 : 2.0)) {
+      U.stepDist = 0;
       NS.audio.enemyStep(pan, Math.min(0.12, 0.22 * atten));
     }
-    u.clickTimer -= dt;
-    if (u.clickTimer <= 0 && u.state !== 'DORMANT') {
-      u.clickTimer = (u.state === 'CHASE' ? 0.5 : 2.0) * (0.85 + math.rand() * 0.3);
+    U.clickTimer -= dt;
+    if (U.clickTimer <= 0 && U.state !== 'DORMANT') {
+      U.clickTimer = (U.state === 'CHASE' ? 0.5 : 2.0) * (0.85 + math.rand() * 0.3);
       NS.audio.click(pan, Math.min(0.12, 0.22 * atten + 0.01));
     }
 
     var saved = { x: E.x, z: E.z, state: E.state, facing: facing, animT: animT,
       skipX: skipX, skipZ: skipZ, skipTimer: skipTimer };
-    E.x = u.x; E.z = u.z; E.state = u.state; facing = u.facing; animT = u.animT;
+    E.x = U.x; E.z = U.z; E.state = U.state; facing = U.facing; animT = U.animT;
     skipX = 0; skipZ = 0;
-    u.bodyCache = buildBody(0);
+    U.bodyCache = buildBody(0);
     E.x = saved.x; E.z = saved.z; E.state = saved.state; facing = saved.facing; animT = saved.animT;
     skipX = saved.skipX; skipZ = saved.skipZ; skipTimer = saved.skipTimer;
+  }
+
+  // legacy name kept so nothing else breaks if referenced
+  function updateB(dt, p, now, game) {
+    updateSecondary(B, dt, p, now, game, 0.95);
   }
 
   // ------------------------------------------------------------------
@@ -590,9 +615,9 @@
       bodyCache = buildBody(0);
       out = bodyCache;
     }
-    for (var i = 0; i < secondaries.length; i++) {
-      if (secondaries[i].bodyCache && secondaries[i].bodyCache.length) {
-        out = out.concat(secondaries[i].bodyCache);
+    for (var i = 0; i < SECONDARIES.length; i++) {
+      if (SECONDARIES[i].bodyCache && SECONDARIES[i].bodyCache.length) {
+        out = out.concat(SECONDARIES[i].bodyCache);
       }
     }
     return out;
@@ -600,12 +625,12 @@
 
   function contacts() {
     var list = [{ id: 'SEC-1', x: E.x, z: E.z, state: E.state }];
-    for (var i = 0; i < secondaries.length; i++) {
+    for (var i = 0; i < SECONDARIES.length; i++) {
       list.push({
         id: 'SEC-' + (i + 2),
-        x: secondaries[i].x,
-        z: secondaries[i].z,
-        state: secondaries[i].state
+        x: SECONDARIES[i].x,
+        z: SECONDARIES[i].z,
+        state: SECONDARIES[i].state
       });
     }
     return list;
@@ -614,10 +639,10 @@
   function addAgitationFloor(v) {
     E.agitationFloor = Math.min(80, E.agitationFloor + v);
     E.agitation = Math.max(E.agitation, E.agitationFloor);
-    for (var i = 0; i < secondaries.length; i++) {
-      var u = secondaries[i];
-      u.agitationFloor = Math.min(80, u.agitationFloor + v * (0.7 - i * 0.05));
-      u.agitation = Math.max(u.agitation, u.agitationFloor);
+    for (var i = 0; i < SECONDARIES.length; i++) {
+      var U = SECONDARIES[i];
+      U.agitationFloor = Math.min(80, U.agitationFloor + v * (0.7 - i * 0.1));
+      U.agitation = Math.max(U.agitation, U.agitationFloor);
     }
   }
 
@@ -626,7 +651,7 @@
     reset: reset, update: update, hear: hear, spheres: spheres,
     contacts: contacts,
     addAgitationFloor: addAgitationFloor,
-    forceChase: enterChase,
+    forceChase: forceChase,
     forceInvestigate: forceInvestigate
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})

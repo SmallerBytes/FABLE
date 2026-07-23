@@ -23,6 +23,7 @@
     sprint: false,
     navX: 0, navY: 0,
     aimOrigin: null, aimDirection: null,
+    holdB: false,
     wrist: null // left-controller grip pose in XR local space
   };
 
@@ -128,8 +129,8 @@
   }
 
   function interactRising(id, gp, isLeft) {
-    // Quest Touch: 4 = A/X, 5 = B/Y. Stick click on RIGHT still interacts.
-    var press = rising(id + '-i4', pressed(gp, 4)) || rising(id + '-i5', pressed(gp, 5));
+    // Quest Touch: 4 = A/X for interact. B/Y (5) is reserved for hold actions (virus plant).
+    var press = rising(id + '-i4', pressed(gp, 4));
     if (!isLeft) press = press || rising(id + '-i3', pressed(gp, 3)) || rising(id + '-i2', pressed(gp, 2));
     return press;
   }
@@ -165,6 +166,7 @@
     currentInput.interactPressed = false;
     currentInput.tricklePressed = false;
     currentInput.sprint = false;
+    currentInput.holdB = false;
     currentInput.navX = 0;
     currentInput.navY = 0;
     currentInput.aimOrigin = null;
@@ -172,6 +174,8 @@
     currentInput.wrist = null;
     dt = dt || 0.016;
     var circuitLock = !!(NS.circuit && NS.circuit.isActive && NS.circuit.isActive());
+    var cloneLock = !!(NS.game && NS.game.cloneUiActive && NS.game.cloneUiActive());
+    var panelLock = circuitLock || cloneLock;
 
     var rightSource = null;
     var leftSource = null;
@@ -181,15 +185,17 @@
       var axes = axesFor(gp);
       if (source.handedness === 'left') {
         leftSource = source;
-        if (!circuitLock) {
+        if (!panelLock) {
           currentInput.moveX = axes[0];
           currentInput.moveY = -axes[1];
           currentInput.sprint = leftSprint(gp);
         }
       } else if (source.handedness === 'right') {
         rightSource = source;
-        if (circuitLock) {
-          // Right stick navigates circuit tiles (latched)
+        // Right B (index 5) — continuous hold for virus plant / confirm holds
+        if (pressed(gp, 5)) currentInput.holdB = true;
+        if (panelLock) {
+          // Right stick navigates circuit tiles / clone choice (latched)
           if (Math.abs(axes[0]) > 0.65 && !navLatchX) {
             currentInput.navX = axes[0] > 0 ? 1 : -1;
             navLatchX = true;
@@ -215,7 +221,7 @@
         }
       } else if (!leftSource && !rightSource) {
         leftSource = source;
-        if (!circuitLock) {
+        if (!panelLock) {
           currentInput.moveX = axes[0];
           currentInput.moveY = -axes[1];
           currentInput.sprint = leftSprint(gp);

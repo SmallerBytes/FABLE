@@ -43,13 +43,15 @@
       <h2>COMMANDER'S INTENT</h2>
       Pre-raid EMP has blacked out the site. Operator maps with LiDAR goggles
       and tracks security on the Wristlink motion radar. Recover 3 access keys,
-      open the console door, jack into the AI core — clone the model and corrupt
-      then extract via LZ while the chopper is on station. The extract pad does
-      <b>not</b> paint on LiDAR — the Mission Director must voice-guide the Operator.
-      Minimize emissions. Three security units are active from infil.
+      open the console door, jack into the AI core and clone the model.
+      After clone they must choose one path: rescue a POW (escort to LZ) or
+      plant a virus at the console (then extract alone). Cannot do both.
+      Minimize emissions. Three security units patrol from the start.
+      If compromised, break to the Faraday harbor in the
+      start/infil room and reorient.
 
       <h2>ROLES</h2>
-      <b>OPERATOR (VR):</b> LiDAR + radar. Keys, doors, AI jack-in, LZ board.<br>
+      <b>OPERATOR (VR):</b> LiDAR + radar. Keys, doors, AI jack-in, path choice, LZ.<br>
       <b>MISSION DIRECTOR (MAP):</b> This sheet + voice. Routes Operator.<br>
       <b>CIRCUIT SOLVER:</b> Print <a href="circuit-print.html">circuit-print.html</a> (unsolved). Call tile IDs.
 
@@ -60,24 +62,26 @@
       <span class="swatch" style="background:#fc0"></span> Tripwire alarm<br>
       <span class="swatch" style="background:#e67e00"></span> Blast door (D1–D3)<br>
       <span class="swatch" style="background:#063;border-radius:50%"></span> <b>START</b> Infil (P)<br>
-      <b>1–3</b> Keys · <b>G</b> Jack-in · <b>X</b> LZ · <b>m</b> Intel · <b>C</b> Security
+      <b>1–3</b> Keys · <b>G</b> Jack-in · <b>X</b> LZ · <b>W</b> POW (rescue path) · <b>m</b> Intel · <b>C</b> Security (3 units)
       <div style="margin-top:6px">Infil grid: col 10, row 23 (atrium west of center).</div>
       <div style="margin-top:4px"><b>D3</b> console door needs all 3 keys. <b>D1/D2</b> optional (1 key).</div>
       <div id="door-coords" style="margin-top:4px"></div>
       <div id="trip-coords" style="margin-top:2px"></div>
 
-      <h2>EXFIL</h2>
-      After uplink: inbound timer, then on-station window.
-      LZ stays dark on LiDAR — map voice guides the Operator to the pad.
-      Miss the window = left behind.
+      <h2>EXFIL FORK</h2>
+      After clone: chopper clock starts when they confirm a path.
+      <b>RESCUE:</b> guide to <b>W</b>, free POW (dark green on LiDAR), escort to <b>X</b>.<br>
+      <b>VIRUS:</b> at <b>G</b>, hold <b>B</b> (Wristlink upload bar) until plant completes, then race to <b>X</b> alone.<br>
+      LZ does <b>not</b> paint on LiDAR — voice the Operator to <b>X</b>.
+      Miss the pad = left behind.
 
       <h2>COMMS</h2>
-      Intent → backbrief → check-ins at keys/doors → report uplink → call LZ status.
+      Intent → backbrief → check-ins at keys/doors → report clone → call path choice → LZ.
       Voice near mic raises signature (EMCON).
     </div>
   </div>
-<script src="src/math.js?v=22"></script>
-<script src="src/map.js?v=22"></script>
+<script src="src/math.js?v=45"></script>
+<script src="src/map.js?v=45"></script>
 <script>
 (function () {
   var M = window.HOLLOW.map;
@@ -147,6 +151,7 @@
 
   label(M.markers.G, 'G', '#840');
   label(M.markers.X, 'X', '#000');
+  label(M.markers.W, 'W', '#064');
   label(M.markers.C, 'C', '#900');
   M.markers.fuses.forEach(function (f, i) { label(f, String(i + 1), '#840'); });
   M.markers.memos.forEach(function (m) { label(m, 'm', '#066'); });

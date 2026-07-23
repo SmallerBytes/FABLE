@@ -94,6 +94,15 @@
   #death-screen h1{ color:var(--red); text-shadow:0 0 18px rgba(255,68,68,.9); }
   #death-epitaph{ color:var(--ph-dim); margin:18px 0 26px; }
 
+  #clone-screen .clone-bar{
+    width:min(420px,80vw); height:14px; margin:18px auto 8px;
+    border:1px solid var(--ph); background:rgba(0,0,0,.5); position:relative;
+  }
+  #clone-fill{ height:100%; width:0%; background:var(--ph); box-shadow:0 0 12px rgba(124,255,155,.45); transition:width .05s linear; }
+  #clone-pct{ letter-spacing:.2em; margin-bottom:18px; }
+  #clone-choice .menu-btn{ display:block; width:100%; max-width:420px; margin:10px auto; text-align:left; }
+  #clone-intel{ text-align:left; max-width:520px; margin:0 auto 16px; white-space:pre-wrap; font-size:13px; line-height:1.45; }
+
   /* ---------- Camcorder OSD ---------- */
   .vcr{ position:absolute; color:#e8e8e0; font-size:14px; letter-spacing:.18em;
     text-shadow:1px 1px 0 rgba(0,0,0,.9), 0 0 6px rgba(232,232,224,.35);
@@ -135,7 +144,7 @@
     <div id="boot-continue" style="display:none">
       <h1>HOLLOW</h1>
       <div class="sub">CYBER INFILTRATION — RD-9 LiDAR / MOTION TRACKER<br>
-      HOSTILE AI CORE · EMP BLACKOUT · CLONE &amp; CORRUPT</div>
+      HOSTILE AI CORE · EMP BLACKOUT · CLONE · THEN RESCUE OR VIRUS</div>
       <div class="opt-row">
         <label>SENS <input type="range" id="opt-sens" min="2" max="20" value="8"></label>
         <label>VOL <input type="range" id="opt-vol" min="0" max="100" value="70"></label>
@@ -173,19 +182,21 @@
 
   MISSION:   RECOVER 3 ACCESS KEYS <span class="amber">[AMBER]</span>
              OPEN CONSOLE DOOR (ALL 3 KEYS) → JACK INTO AI CORE
-             CLONE THE MODEL · CORRUPT THEIR INSTANCE
-             OPTIONAL BLAST DOORS = SHORTCUTS (1 KEY EACH)
-             AFTER UPLINK: MAP GUIDE CALLS EXTRACT — LZ IS DARK ON LiDAR
-             REACH THE PAD BEFORE CHOPPER DEPARTS
+             CLONE THE MODEL TO HARD DRIVE
+             THEN CHOOSE ONE: RESCUE POW (DARK GREEN) <span class="dim">OR</span> PLANT VIRUS
+             AFTER CHOICE: MAP GUIDE VOICES YOU — LZ NOT PAINTED ON LiDAR
 
   <span style="color:#0f0">HARBOR GREEN</span> = ONE FARADAY SAFE ROOM (START / INFIL ROOM)
   <span class="amber">YELLOW</span> = TRIPWIRE ALARM
   <span style="color:#4a6cff">DARK BLUE</span> = BLAST DOORS
-  <span class="dim">EXTRACT PAD</span> = NOT PAINTED ON LiDAR — FOLLOW MAP VOICE
+  <span style="color:#0a722e">DARK GREEN</span> = POW (AFTER RESCUE PATH — ESCORT TO LZ)
+  <span class="dim">LZ (X ON MAP)</span> = CHOPPER PAD — NOT PAINTED AFTER UPLINK; GUIDE REQUIRED
 
   <span class="red">RED RETURNS = SECURITY (3 UNITS ACTIVE). DO NOT ENGAGE.</span>
   <span class="dim">WRISTLINK MOTION TRACKER FLAGS SECURITY. MIC / VOICE RAISES SIGNATURE.</span>
   <span class="dim">VR SPRINT: HOLD LEFT GRIP (OR STICK CLICK). WALK IS DEFAULT. LOUD + STAMINA.</span>
+  <span class="dim">VR VIRUS PATH: HOLD RIGHT B AT CONSOLE — WRISTLINK SHOWS UPLOAD.</span>
+  <span class="dim">DESKTOP VIRUS: HOLD E AT CONSOLE TO UPLOAD.</span>
   <span class="dim">RAISE LEFT CONTROLLER — WRISTLINK FOLLOWS THE CONTROLLER (MOTION + STAMINA).</span>
   <span class="dim">VR JACK-IN: 6×6 MATRIX · TILE IDs A1–F6 · STICK MOVE · A ROTATE · TRIGGER NEXT.</span>
   <span class="dim">PRINT CIRCUIT DOWNLOAD FOR THE OUTSIDE SOLVER — SAME UNSOLVED BOARD.</span></pre>
@@ -202,9 +213,9 @@
       <button type="button" class="menu-btn primary" id="btn-start-desktop">START DESKTOP</button>
       <button id="enter-vr" type="button" class="menu-btn" disabled>CHECKING WEBXR...</button>
     </div>
-    <div id="vr-note">QUEST: HOLD LEFT GRIP TO SPRINT · RAISE LEFT CONTROLLER FOR WRISTLINK · RIGHT STICK TURN (SNAP OR SMOOTH) · TRIGGER SCAN · RIGHT GRIP BURST · A/X INTERACT</div>
+    <div id="vr-note">QUEST: HOLD LEFT GRIP TO SPRINT · RAISE LEFT CONTROLLER FOR WRISTLINK · HOLD RIGHT B AT CONSOLE TO PLANT VIRUS · RIGHT STICK TURN · TRIGGER SCAN · RIGHT GRIP BURST · A/X INTERACT</div>
     <p style="margin-top:18px">
-      <a href="map-print.html?v=42" target="_blank" rel="noopener"
+      <a href="map-print.html?v=45" target="_blank" rel="noopener"
          style="color:#7cff9b;border:1px solid #7cff9b;padding:8px 14px;text-decoration:none;display:inline-block;pointer-events:auto;margin:4px">
         MAP DOWNLOAD
       </a>
@@ -225,6 +236,21 @@
   </div>
 </div>
 
+<div class="screen" id="clone-screen">
+  <div class="screen-inner">
+    <div class="sub" id="clone-title">CORE UPLINK</div>
+    <pre id="clone-status">CLONING AI ONTO HARD DRIVE…</pre>
+    <div class="clone-bar"><div id="clone-fill"></div></div>
+    <div id="clone-pct">0%</div>
+    <div id="clone-choice" style="display:none">
+      <pre id="clone-intel"></pre>
+      <button type="button" class="menu-btn primary" id="btn-rescue">RESCUE POW — ESCORT TO LZ</button>
+      <button type="button" class="menu-btn" id="btn-virus">PLANT VIRUS — CORRUPT LOCAL AI</button>
+      <p class="dim" style="margin-top:14px">ONE PATH ONLY. CHOPPER CLOCK STARTS ON CONFIRM.</p>
+    </div>
+  </div>
+</div>
+
 <div class="screen" id="win-screen">
   <div class="screen-inner">
     <pre id="win-text"></pre>
@@ -234,14 +260,14 @@
 
 <div id="crt-frame"></div>
 
-<script src="src/math.js?v=43"></script>
-<script src="src/map.js?v=43"></script>
-<script src="src/render.js?v=43"></script>
-<script src="src/audio.js?v=43"></script>
-<script src="src/mic.js?v=43"></script>
-<script src="src/enemy.js?v=43"></script>
-<script src="src/circuit.js?v=43"></script>
-<script src="src/vr.js?v=43"></script>
-<script src="src/game.js?v=43"></script>
+<script src="src/math.js?v=46"></script>
+<script src="src/map.js?v=46"></script>
+<script src="src/render.js?v=46"></script>
+<script src="src/audio.js?v=46"></script>
+<script src="src/mic.js?v=46"></script>
+<script src="src/enemy.js?v=46"></script>
+<script src="src/circuit.js?v=46"></script>
+<script src="src/vr.js?v=46"></script>
+<script src="src/game.js?v=46"></script>
 </body>
 </html>

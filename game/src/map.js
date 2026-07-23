@@ -20,7 +20,7 @@
     "#...#..#..........#...........#......#..#..#...#",
     "###.#############.#####...########.######.####.#",
     "#......#...........#.........#.................#",
-    "#......#...........#.........#..##..##..##.....#",
+    "#..W...#...........#.........#..##..##..##.....#",
     "#..1...#..##..##............m...##..##..##..#..#",
     "#......#..##..##....#.........#..............#.#"
   ];
@@ -52,7 +52,7 @@
   var grid = [];
   var safe = [];
   var ROWS = 0, COLS = 0;
-  var markers = { fuses: [], memos: [], P: null, C: null, G: null, X: null, safes: [], lasers: [], doors: [] };
+  var markers = { fuses: [], memos: [], P: null, C: null, G: null, X: null, W: null, safes: [], lasers: [], doors: [] };
   var doorSolid = {}; // key "c,r" -> true while locked
 
   function doorKey(c, r) { return c + ',' + r; }
@@ -88,6 +88,7 @@
         else if (ch === 'C') markers.C = { x: wx, z: wz };
         else if (ch === 'G') markers.G = { x: wx, z: wz };
         else if (ch === 'X') markers.X = { x: wx, z: wz };
+        else if (ch === 'W') markers.W = { x: wx, z: wz };
         else if (ch === '1' || ch === '2' || ch === '3') markers.fuses[+ch - 1] = { x: wx, z: wz };
         else if (ch === 'm') markers.memos.push({ x: wx, z: wz });
         else if (ch === 'S') {

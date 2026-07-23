@@ -517,6 +517,54 @@
       : (sta < 0.3 ? 'rgba(255,179,71,0.95)' : 'rgba(120,200,255,0.95)');
     ctx.fillRect(bx2 + 2, by3 + 2, Math.max(0, (bw2 - 4) * sta), bh2 - 4);
 
+    // Virus upload takeover — flashing Wristlink plant screen
+    if (hudState.virusUpload != null) {
+      var vp = Math.max(0, Math.min(1, hudState.virusUpload));
+      var active = !!hudState.virusHolding;
+      var flash = 0.45 + 0.55 * Math.abs(Math.sin(Date.now() * 0.012));
+      ctx.fillStyle = active
+        ? 'rgba(12, 4, 4, ' + (0.88 + flash * 0.1) + ')'
+        : 'rgba(4, 10, 8, 0.94)';
+      ctx.fillRect(12, 12, w - 24, h - 24);
+      ctx.strokeStyle = active
+        ? 'rgba(255,' + Math.floor(60 + flash * 80) + ',60,' + (0.55 + flash * 0.45) + ')'
+        : 'rgba(255,120,60,0.7)';
+      ctx.lineWidth = active ? 8 : 4;
+      ctx.strokeRect(16, 16, w - 32, h - 32);
+      if (active) {
+        ctx.strokeStyle = 'rgba(255,40,40,' + flash + ')';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(28, 28, w - 56, h - 56);
+      }
+      ctx.textAlign = 'center';
+      ctx.fillStyle = active
+        ? 'rgba(255,' + Math.floor(100 + flash * 80) + ',80,0.98)'
+        : 'rgba(255,160,80,0.95)';
+      ctx.font = 'bold 28px Consolas, monospace';
+      ctx.fillText(active ? '⚠ UPLOADING VIRUS' : 'VIRUS PAYLOAD', w * 0.5, 78);
+      ctx.font = '18px Consolas, monospace';
+      ctx.fillStyle = 'rgba(255,200,160,0.85)';
+      ctx.fillText(active ? 'HOLD B — DO NOT RELEASE' : 'HOLD B AT CONSOLE TO UPLOAD', w * 0.5, 112);
+
+      var ubx = 80, uby = 170, ubw = w - 160, ubh = 36;
+      ctx.strokeStyle = 'rgba(255,120,60,0.95)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(ubx, uby, ubw, ubh);
+      ctx.fillStyle = active
+        ? 'rgba(255,' + Math.floor(50 + flash * 50) + ',40,0.95)'
+        : 'rgba(255,140,50,0.9)';
+      ctx.fillRect(ubx + 3, uby + 3, Math.max(0, (ubw - 6) * vp), ubh - 6);
+      ctx.fillStyle = 'rgba(255,230,200,0.98)';
+      ctx.font = 'bold 26px Consolas, monospace';
+      ctx.fillText(Math.floor(vp * 100) + '%', w * 0.5, uby + ubh + 36);
+      ctx.font = '15px Consolas, monospace';
+      ctx.fillStyle = 'rgba(255,180,120,0.8)';
+      ctx.fillText('SEEDING LOCAL INSTANCE · EMCON DEGRADED', w * 0.5, uby + ubh + 64);
+      ctx.fillText(hudState.timer || '', w * 0.5, h - 48);
+      hudDirty = false;
+      return;
+    }
+
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.fillRect(28, h - 72, w - 56, 48);
     ctx.strokeStyle = 'rgba(255,179,71,0.45)';
@@ -549,7 +597,9 @@
       contacts: state.contacts || [],
       yaw: state.yaw || 0,
       px: state.px || 0,
-      pz: state.pz || 0
+      pz: state.pz || 0,
+      virusUpload: state.virusUpload == null ? null : state.virusUpload,
+      virusHolding: !!state.virusHolding
     };
     hudDirty = true;
   }

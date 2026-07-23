@@ -15,7 +15,7 @@
   var BURST_TIME = 1.4, BURST_COOLDOWN = 6.0;
   var BURST_HALF_FOV = 75 * Math.PI / 180, BURST_COL_STEP = 0.55 * Math.PI / 180;
   var BURST_V_SAMPLES = 26, BURST_V_SPREAD = 0.95; // radians, ± around aim pitch
-  var POINT_LIFE = 90, ENEMY_POINT_LIFE = 2.5, BEACON_LIFE = 1.2;
+  var POINT_LIFE = 90, ENEMY_POINT_LIFE = 2.5;
   var SCAN_RANGE = 60;
   var INTERACT_RANGE = 2.4;
   var INTERACT_RANGE_VR = 4.2;
@@ -61,7 +61,7 @@
   var C_AMBER = [1.0, 0.70, 0.28];
   var C_CYAN = [0.43, 0.91, 0.91];
   var C_RED = [1.0, 0.27, 0.27];
-  var C_WHITE = [1.0, 1.0, 1.0];
+  var C_POW = [0.08, 0.45, 0.18];   // rescued POW — dark green LiDAR
   var C_DOOR = [0.12, 0.28, 0.72];   // locked blast doors — dark blue
   var NOISE_LASER = 32;
   var LASER_COOLDOWN = 10;
@@ -70,17 +70,23 @@
   var CHOPPER_LINGER_S = 25;
   var LZ_RADIUS = 3.5;
   var NOISE_UPLINK = 40;
+  var NOISE_VIRUS = 28;
+  var CLONE_DURATION_S = 4.5;
+  var VIRUS_DURATION_S = 11;
+  var POW_FOLLOW_SPEED = 2.55;
+  var POW_STOP_DIST = 1.25;
+  var POW_RADIUS = 0.4;
 
   var MEMO_TEXTS = [
     "OPS FRAGMENT — PRE-INFIL EMP DROPPED SITE POWER. FACILITY IS DARK. YOUR ONLY MAP IS THE RD-9 LiDAR GOGGLES. MOTION TRACKER ON THE WRISTLINK FLAGS SECURITY RETURNS.",
     "INTEL NOTE — HOSTILE AI CORE IS HOUSED BEHIND THE CONSOLE DOOR. ACCESS KEYS ARE SCATTERED ACROSS THE WING. ALL THREE REQUIRED FOR D3. OTHER BLAST DOORS ARE OPTIONAL SHORTCUTS.",
-    "MISSION ADDENDUM — AT THE CORE: CLONE THE MODEL TO OUR UPLINK, THEN CORRUPT THEIR LOCAL INSTANCE. AFTER UPLINK, EXTRACT IS DARK ON LiDAR — MAP GUIDE CALLS THE PAD. MISS THE WINDOW AND YOU ARE LEFT BEHIND.",
-    "THREAT PROFILE — SECURITY UNITS ARE BLIND IN THE BLACKOUT BUT ACOUSTICALLY SENSITIVE. EMISSIONS DRAW THEM. THE START ROOM FARADAY HARBOR DAMPENS YOUR SIGNATURE. TRIPWIRES ALARM THE GRID."
+    "MISSION ADDENDUM — AT THE CORE: CLONE THE MODEL FIRST. THEN YOU MUST CHOOSE — RESCUE A REPORTED POW AND ESCORT TO THE LZ, OR STAY AND PLANT A VIRUS TO OWN THEIR TECH WHEN POWER RETURNS. YOU CANNOT DO BOTH. LZ STILL DOES NOT PAINT — MAP GUIDE REQUIRED.",
+    "THREAT PROFILE — THREE SECURITY UNITS PATROL FROM INSERTION. THEY ARE BLIND IN THE BLACKOUT BUT ACOUSTICALLY SENSITIVE. EMISSIONS DRAW THEM. THE START ROOM FARADAY HARBOR DAMPENS YOUR SIGNATURE. TRIPWIRES ALARM THE GRID."
   ];
 
   var BOOT_LINES = [
     "RD-9 RANGING PACKAGE — CYBER INFILTRATION LOADOUT",
-    "BUILD 0.9.2 / BLACKOUT OPERATIONS OVERLAY",
+    "BUILD 0.9.3 / BLACKOUT OPERATIONS OVERLAY",
     "",
     "SELF TEST ............. OK",
     "LiDAR GOGGLES ......... OK",
@@ -90,26 +96,50 @@
     "SITUATION: HOSTILE SITE HOUSES A HIGH-RISK AI MODEL.",
     "PRE-RAID EMP HAS CUT POWER. FACILITY IS DARK.",
     "",
-    "MISSION: INFILTRATE. REACH THE AI CORE.",
-    "         CLONE THE MODEL. CORRUPT THEIR INSTANCE.",
+    "MISSION: INFILTRATE. REACH THE AI CORE. CLONE THE MODEL.",
+    "         THEN CHOOSE: RESCUE POW OR PLANT VIRUS.",
     "         EXFIL BEFORE THE EXTRACT WINDOW CLOSES.",
     "",
     "TOOLS: LiDAR MAPS THE DARK. WRIST RADAR TRACKS SECURITY.",
     "EMCON: MINIMIZE EMISSIONS. THEY HEAR WHAT YOU LIGHT."
   ];
 
-  var WIN_LINES = [
+  var WIN_LINES_RESCUE = [
     "UPLINK CONFIRMED. MODEL CLONE RECEIVED.",
-    "HOSTILE INSTANCE MARKED CORRUPT.",
-    "OPERATOR EXTRACTED VIA LZ. CHOPPER AWAY.",
+    "POW EXTRACTED VIA LZ. CHOPPER AWAY.",
     "",
-    "MISSION SUCCESS — AI COMPROMISED.",
+    "MISSION SUCCESS — ASSET RECOVERED.",
     "",
-    "DEBRIEF: IN THE BLACKOUT, DISCIPLINE",
-    "AND TIMING DECIDED THE RUN.",
+    "THE VIRUS WAS NEVER PLANTED.",
+    "THEIR MAINFRAME WILL WAKE UNTOUCHED.",
+    "",
+    "DEBRIEF: YOU CHOSE THE LIVING OVER THE GRID.",
     "",
     "( END TRANSMISSION )"
   ];
+
+  var WIN_LINES_VIRUS = [
+    "UPLINK CONFIRMED. MODEL CLONE RECEIVED.",
+    "VIRUS SEEDED IN LOCAL INSTANCE.",
+    "OPERATOR EXTRACTED VIA LZ. CHOPPER AWAY.",
+    "",
+    "MISSION SUCCESS — HOSTILE TECH COMPROMISED.",
+    "",
+    "WHEN THEIR MAINFRAME RETURNS ONLINE,",
+    "YOU WILL HOLD THE KEYS.",
+    "",
+    "DEBRIEF: THE POW WAS LEFT IN THE DARK.",
+    "",
+    "( END TRANSMISSION )"
+  ];
+
+  var CLONE_INTEL =
+    "CLONE COMPLETE.\n\n" +
+    "FLASH TRAFFIC: POSSIBLE POW HELD WEST OF THE CORE WING.\n" +
+    "DARK-GREEN LiDAR RETURN AFTER FREE. ESCORT TO LZ.\n\n" +
+    "ALTERNATE: REMAIN AT CONSOLE. PLANT VIRUS.\n" +
+    "WHEN THEIR MAINFRAME WAKES, YOU OWN THE STACK.\n\n" +
+    "ONE PATH ONLY. CHOPPER CLOCK STARTS ON CONFIRM.";
 
   var FAIL_LEFT_LINES = [
     "CHOPPER DEPARTED. LZ COLD.",
@@ -136,7 +166,19 @@
   var uplinkDone = false;
   var exfilPhase = 'NONE'; // NONE | INBOUND | ON_STATION | GONE
   var exfilTimer = 0;
-  var beaconTimer = 0;
+  var missionBranch = 'NONE'; // NONE | RESCUE | VIRUS
+  var clonePhase = 'NONE'; // NONE | CLONING | CHOICE | DONE
+  var cloneTimer = 0;
+  var clonePct = 0;
+  var cloneChoiceIdx = 0; // 0 rescue, 1 virus (VR highlight)
+  var virusProgress = 0;
+  var virusDone = false;
+  var virusNoiseTimer = 0;
+  var virusHolding = false;
+  var virusWristActive = false; // show upload UI on wrist while at console on virus path
+  var pow = null; // { x, z, freed, path, pathIdx, repath }
+  var cloneCanvas = null;
+  var cloneCtx = null;
   var auxLoud = 0, recentLoud = 0;
   var stamina = STAMINA_MAX, staminaExhausted = false;
   var tearTimer = 0, floodLevel = 0, dieTimer = 0;
@@ -172,6 +214,14 @@
     el.controls = $('controls-screen');
     el.death = $('death-screen'); el.epitaph = $('death-epitaph');
     el.win = $('win-screen'); el.winText = $('win-text');
+    el.clone = $('clone-screen');
+    el.cloneStatus = $('clone-status');
+    el.cloneFill = $('clone-fill');
+    el.clonePct = $('clone-pct');
+    el.cloneChoice = $('clone-choice');
+    el.cloneIntel = $('clone-intel');
+    el.btnRescue = $('btn-rescue');
+    el.btnVirus = $('btn-virus');
 
     R.init(el.canvas);
     VR.init($('enter-vr'));
@@ -213,13 +263,32 @@
         else if (state === 'CONTROLS') { startDesktop(); }
         else if (state === 'DEAD' || state === 'LEFT') { showScreen('controls'); state = 'CONTROLS'; }
         else if (state === 'WIN') { state = 'BOOT'; startBootType(); }
+        else if (clonePhase === 'CHOICE' && !inVR()) {
+          confirmCloneChoice(cloneChoiceIdx === 0 ? 'RESCUE' : 'VIRUS');
+        }
+      }
+      if (clonePhase === 'CHOICE' && !inVR()) {
+        if (e.code === 'Digit1' || e.code === 'Numpad1' || e.code === 'ArrowUp') {
+          cloneChoiceIdx = 0; updateCloneDesktopChoice();
+        }
+        if (e.code === 'Digit2' || e.code === 'Numpad2' || e.code === 'ArrowDown') {
+          cloneChoiceIdx = 1; updateCloneDesktopChoice();
+        }
       }
       if (e.code === 'Space') {
-        if (state === 'PLAY' && !(CIR && CIR.isActive())) { e.preventDefault(); tryBurst(); }
+        if (state === 'PLAY' && !(CIR && CIR.isActive()) && !cloneUiActive()) { e.preventDefault(); tryBurst(); }
       }
       if (e.code === 'KeyE' && state === 'PLAY') {
+        if (e.repeat) return;
         if (CIR && CIR.isActive()) CIR.rotateSelected();
-        else interact();
+        else if (!cloneUiActive()) {
+          // Virus plant uses hold-E; don't spam interact while uploading
+          if (missionBranch === 'VIRUS' && !virusDone &&
+              near(M.markers.G.x, M.markers.G.z, interactRange() + 0.8)) {
+            return;
+          }
+          interact();
+        }
       }
     });
     window.addEventListener('keyup', function (e) { keys[e.code] = false; });
@@ -275,6 +344,19 @@
       if (state === 'WIN') { state = 'BOOT'; startBootType(); }
     });
 
+    if (el.btnRescue) {
+      el.btnRescue.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (clonePhase === 'CHOICE') confirmCloneChoice('RESCUE');
+      });
+    }
+    if (el.btnVirus) {
+      el.btnVirus.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (clonePhase === 'CHOICE') confirmCloneChoice('VIRUS');
+      });
+    }
+
     document.addEventListener('pointerlockchange', function () {
       var locked = document.pointerLockElement === el.canvas;
       if (locked && state === 'CONTROLS') {
@@ -282,6 +364,7 @@
         state = 'PLAY';
         showScreen(null);
       } else if (!locked && state === 'PLAY') {
+        if (cloneUiActive()) return; // choosing path — stay in PLAY
         state = 'CONTROLS';
         trickleOn = false;
         showScreen('controls');
@@ -332,12 +415,15 @@
   }
 
   function showScreen(name) {
-    [el.boot, el.controls, el.death, el.win].forEach(function (s) { s.classList.remove('visible'); });
+    [el.boot, el.controls, el.death, el.win, el.clone].forEach(function (s) {
+      if (s) s.classList.remove('visible');
+    });
     el.hud.style.display = (name === null) ? 'block' : 'none';
     if (name === 'boot') el.boot.classList.add('visible');
     if (name === 'controls') el.controls.classList.add('visible');
     if (name === 'death') el.death.classList.add('visible');
     if (name === 'win') el.win.classList.add('visible');
+    if (name === 'clone' && el.clone) el.clone.classList.add('visible');
   }
 
   // ------------------------------------------------------------------
@@ -392,6 +478,11 @@
     keysCollected = 0; doorsOpen = 0;
     uplinkDone = false;
     exfilPhase = 'NONE'; exfilTimer = 0;
+    missionBranch = 'NONE';
+    clonePhase = 'NONE'; cloneTimer = 0; clonePct = 0; cloneChoiceIdx = 0;
+    virusProgress = 0; virusDone = false; virusNoiseTimer = 0;
+    virusHolding = false; virusWristActive = false;
+    pow = null;
     burst.active = false; burst.t = 0; burst.cooldown = 0;
     trickleOn = false; auxLoud = 0; recentLoud = 0;
     stamina = STAMINA_MAX; staminaExhausted = false;
@@ -453,29 +544,195 @@
     }
   }
 
-  function winGame() {
+  function winGame(ending) {
     runActive = false;
     state = 'WIN';
+    clonePhase = 'DONE';
     if (CIR) CIR.close();
+    if (R.setCircuitPanel) R.setCircuitPanel(null, null);
     if (A.chopperStop) A.chopperStop();
     document.exitPointerLock();
     if (VR.active()) VR.end();
-    el.winText.textContent = WIN_LINES.join('\n');
+    var lines = ending === 'VIRUS' ? WIN_LINES_VIRUS : WIN_LINES_RESCUE;
+    el.winText.textContent = lines.join('\n');
     showScreen('win');
     A.sting(false);
   }
 
-  function startExfil() {
+  function cloneUiActive() {
+    return clonePhase === 'CLONING' || clonePhase === 'CHOICE';
+  }
+
+  function ensureCloneCanvas() {
+    if (cloneCanvas) return;
+    cloneCanvas = document.createElement('canvas');
+    cloneCanvas.width = 640;
+    cloneCanvas.height = 420;
+    cloneCtx = cloneCanvas.getContext('2d');
+  }
+
+  function drawClonePanel() {
+    ensureCloneCanvas();
+    var ctx = cloneCtx;
+    var w = cloneCanvas.width, h = cloneCanvas.height;
+    ctx.fillStyle = 'rgba(0,10,6,0.96)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#7cff9b';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 8, w - 16, h - 16);
+    ctx.fillStyle = '#7cff9b';
+    ctx.font = '16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('CORE UPLINK', w / 2, 42);
+    if (clonePhase === 'CLONING') {
+      ctx.fillStyle = '#cfe';
+      ctx.font = '18px monospace';
+      ctx.fillText('CLONING AI ONTO HARD DRIVE…', w / 2, 120);
+      var barW = 420, barH = 18, bx = (w - barW) / 2, by = 160;
+      ctx.strokeStyle = '#7cff9b';
+      ctx.strokeRect(bx, by, barW, barH);
+      ctx.fillStyle = '#3dff8a';
+      ctx.fillRect(bx + 2, by + 2, Math.max(0, (barW - 4) * (clonePct / 100)), barH - 4);
+      ctx.fillStyle = '#7cff9b';
+      ctx.font = '22px monospace';
+      ctx.fillText(Math.floor(clonePct) + '%', w / 2, 220);
+    } else if (clonePhase === 'CHOICE') {
+      ctx.fillStyle = '#b8e0c8';
+      ctx.font = '13px monospace';
+      ctx.textAlign = 'left';
+      var lines = CLONE_INTEL.split('\n');
+      var y = 70;
+      for (var i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], 36, y);
+        y += 18;
+      }
+      var opts = ['RESCUE POW — ESCORT TO LZ', 'PLANT VIRUS — CORRUPT LOCAL AI'];
+      for (i = 0; i < opts.length; i++) {
+        var selected = cloneChoiceIdx === i;
+        ctx.fillStyle = selected ? 'rgba(124,255,155,0.25)' : 'rgba(0,0,0,0.35)';
+        ctx.fillRect(40, 290 + i * 48, w - 80, 40);
+        ctx.strokeStyle = selected ? '#7cff9b' : '#355';
+        ctx.strokeRect(40, 290 + i * 48, w - 80, 40);
+        ctx.fillStyle = selected ? '#7cff9b' : '#8aa';
+        ctx.font = '15px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText((selected ? '> ' : '  ') + opts[i], w / 2, 316 + i * 48);
+      }
+      ctx.fillStyle = '#6a8';
+      ctx.font = '12px monospace';
+      ctx.fillText('STICK SELECT · A / X CONFIRM', w / 2, 400);
+    }
+  }
+
+  function syncClonePanel() {
+    if (!R.setCircuitPanel) return;
+    if (cloneUiActive() && inVR()) {
+      drawClonePanel();
+      R.setCircuitPanel(cloneCanvas, buildCircuitModel());
+    } else if (!(CIR && CIR.isActive() && inVR())) {
+      // leave circuit panel alone when circuit owns it
+      if (!CIR || !CIR.isActive()) R.setCircuitPanel(null, null);
+    }
+  }
+
+  function updateCloneDesktopChoice() {
+    if (!el.btnRescue || !el.btnVirus) return;
+    if (cloneChoiceIdx === 0) {
+      el.btnRescue.classList.add('primary');
+      el.btnVirus.classList.remove('primary');
+    } else {
+      el.btnVirus.classList.add('primary');
+      el.btnRescue.classList.remove('primary');
+    }
+  }
+
+  function beginCloneSequence() {
     uplinkDone = true;
-    exfilPhase = 'INBOUND';
-    exfilTimer = CHOPPER_INBOUND_S;
+    clonePhase = 'CLONING';
+    cloneTimer = 0;
+    clonePct = 0;
+    cloneChoiceIdx = 0;
     if (A.uplinkSurge) A.uplinkSurge();
     else if (A.generatorRoar) A.generatorRoar();
+    queueMsg('CLONE SEQUENCE — WRITING MODEL TO DRIVE', 'amber', 3);
+    if (!inVR()) {
+      document.exitPointerLock();
+      if (el.cloneChoice) el.cloneChoice.style.display = 'none';
+      if (el.cloneStatus) el.cloneStatus.textContent = 'CLONING AI ONTO HARD DRIVE…';
+      if (el.cloneFill) el.cloneFill.style.width = '0%';
+      if (el.clonePct) el.clonePct.textContent = '0%';
+      showScreen('clone');
+    }
+  }
+
+  function enterCloneChoice() {
+    clonePhase = 'CHOICE';
+    clonePct = 100;
+    if (!inVR()) {
+      if (el.cloneStatus) el.cloneStatus.textContent = 'CLONE COMPLETE';
+      if (el.cloneFill) el.cloneFill.style.width = '100%';
+      if (el.clonePct) el.clonePct.textContent = '100%';
+      if (el.cloneIntel) el.cloneIntel.textContent = CLONE_INTEL;
+      if (el.cloneChoice) el.cloneChoice.style.display = 'block';
+      updateCloneDesktopChoice();
+      showScreen('clone');
+    }
+    queueMsg('FLASH TRAFFIC — POW INTEL · CHOOSE PATH', 'amber', 4);
+  }
+
+  function confirmCloneChoice(branch) {
+    if (clonePhase !== 'CHOICE') return;
+    if (branch !== 'RESCUE' && branch !== 'VIRUS') return;
+    missionBranch = branch;
+    clonePhase = 'DONE';
+    if (branch === 'RESCUE') {
+      var w = M.markers.W || { x: M.markers.P.x - 12, z: M.markers.P.z - 18 };
+      pow = { x: w.x, z: w.z, freed: false, path: null, pathIdx: 0, repath: 0 };
+    } else {
+      pow = null;
+      virusProgress = 0;
+      virusDone = false;
+    }
+    if (el.clone) el.clone.classList.remove('visible');
+    showScreen(null);
+    if (R.setCircuitPanel) R.setCircuitPanel(null, null);
+    startExfil();
+    if (!inVR()) {
+      try { el.canvas.requestPointerLock(); } catch (err) { void err; }
+    }
+  }
+
+  function updateCloneSequence(dt, vrInput) {
+    if (clonePhase === 'CLONING') {
+      cloneTimer += dt;
+      clonePct = Math.min(100, (cloneTimer / CLONE_DURATION_S) * 100);
+      if (!inVR()) {
+        if (el.cloneFill) el.cloneFill.style.width = clonePct + '%';
+        if (el.clonePct) el.clonePct.textContent = Math.floor(clonePct) + '%';
+      }
+      if (cloneTimer >= CLONE_DURATION_S) enterCloneChoice();
+    } else if (clonePhase === 'CHOICE' && vrInput) {
+      if (vrInput.navY < 0 || vrInput.navX < 0) cloneChoiceIdx = 0;
+      if (vrInput.navY > 0 || vrInput.navX > 0) cloneChoiceIdx = 1;
+      if (vrInput.interactPressed || vrInput.tricklePressed) {
+        confirmCloneChoice(cloneChoiceIdx === 0 ? 'RESCUE' : 'VIRUS');
+      }
+    }
+    if (cloneUiActive() && inVR()) syncClonePanel();
+  }
+
+  function startExfil() {
+    exfilPhase = 'INBOUND';
+    exfilTimer = CHOPPER_INBOUND_S;
     if (A.chopperInbound) A.chopperInbound();
-    queueMsg('UPLINK ESTABLISHED — CHOPPER INBOUND', 'amber', 5);
     EN.state.agitation = 100;
     EN.hear(M.markers.G.x, M.markers.G.z, NOISE_UPLINK, now, true);
-    EN.forceChase();
+    EN.forceChase(now);
+    if (missionBranch === 'RESCUE') {
+      queueMsg('RESCUE PATH — MAP GUIDE: ROUTE TO POW THEN LZ', 'amber', 5);
+    } else {
+      queueMsg('VIRUS PATH — PLANT AT CONSOLE THEN EXTRACT', 'amber', 5);
+    }
   }
 
   function onCircuitTimeout() {
@@ -483,6 +740,10 @@
     A.securityAlarm();
     EN.hear(M.markers.G.x, M.markers.G.z, NOISE_LASER, now, true);
     EN.forceInvestigate(M.markers.G.x, M.markers.G.z);
+  }
+
+  function onJackInSuccess() {
+    beginCloneSequence();
   }
 
   // ------------------------------------------------------------------
@@ -576,6 +837,12 @@
       var t = raySphere(ox, oy, oz, dx, dy, dz, sph[i]);
       if (t > 0 && t < bestT) { bestT = t; color = C_RED; life = ENEMY_POINT_LIFE; }
     }
+    // POW — dark green returns (same treatment as security)
+    var ps = powSpheres();
+    for (i = 0; i < ps.length; i++) {
+      t = raySphere(ox, oy, oz, dx, dy, dz, ps[i]);
+      if (t > 0 && t < bestT) { bestT = t; color = C_POW; life = ENEMY_POINT_LIFE; }
+    }
     // items
     for (i = 0; i < accessKeys.length; i++) {
       if (accessKeys[i].taken) continue;
@@ -594,7 +861,8 @@
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: door.x, y: 1.3, z: door.z, r: 1.15 });
       if (t > 0 && t < bestT) { bestT = t; color = C_DOOR; life = POINT_LIFE; }
     }
-    if (!uplinkDone) {
+    // console pyramid visible for jack-in and virus plant
+    if (!uplinkDone || (missionBranch === 'VIRUS' && !virusDone)) {
       t = rayConsolePyramid(ox, oy, oz, dx, dy, dz);
       if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
     }
@@ -803,7 +1071,7 @@
       dot = (tfx * dx + tfz * dz) / dist;
       if (dot >= bestDot) { bestDot = dot; best = { kind: 'door', i: i, dist: dist }; }
     }
-    if (!uplinkDone && M.markers.G) {
+    if ((!uplinkDone || (missionBranch === 'VIRUS' && !virusDone)) && M.markers.G) {
       tfx = M.markers.G.x - ox; tfz = M.markers.G.z - oz;
       dist = Math.sqrt(tfx * tfx + tfz * tfz);
       if (dist <= VR_AIM_MAX + 1.5) {
@@ -811,6 +1079,16 @@
         if (dot >= bestDot) {
           bestDot = dot;
           best = { kind: 'console', dist: dist };
+        }
+      }
+    }
+    if (missionBranch === 'RESCUE' && pow && !pow.freed) {
+      tfx = pow.x - ox; tfz = pow.z - oz;
+      dist = Math.sqrt(tfx * tfx + tfz * tfz);
+      if (dist <= VR_AIM_MAX + 0.5) {
+        dot = dist > 0.01 ? (tfx * dx + tfz * dz) / dist : 1;
+        if (dot >= bestDot) {
+          best = { kind: 'pow', dist: dist };
         }
       }
     }
@@ -828,8 +1106,25 @@
   }
 
   function tryJackIn() {
+    if (cloneUiActive()) return;
+    if (missionBranch === 'VIRUS') {
+      if (virusDone) {
+        pushMsg('VIRUS ARMED — ASK MAP GUIDE FOR LZ', 'amber');
+      } else {
+        pushMsg(inVR()
+          ? 'HOLD B AT CONSOLE — WRISTLINK UPLOAD'
+          : 'HOLD E AT CONSOLE — UPLOAD VIRUS', 'amber');
+      }
+      return;
+    }
+    if (missionBranch === 'RESCUE') {
+      pushMsg(pow && pow.freed
+        ? 'PATH LOCKED — ESCORT POW TO LZ'
+        : 'PATH LOCKED — FREE THE POW (DARK GREEN)', 'amber');
+      return;
+    }
     if (uplinkDone) {
-      pushMsg('UPLINK ALREADY LIVE — MOVE TO LZ', 'amber');
+      pushMsg('CLONE ALREADY ON DRIVE — AWAIT PATH CHOICE', 'amber');
       return;
     }
     if (M.isConsoleSealed()) {
@@ -840,7 +1135,132 @@
     pushMsg(inVR()
       ? 'JACK-IN — RIGHT STICK MOVE TILE · A/X ROTATE'
       : 'JACK-IN SEQUENCE — ROUTE THE MATRIX', 'amber');
-    CIR.open(startExfil, onCircuitTimeout);
+    CIR.open(onJackInSuccess, onCircuitTimeout);
+  }
+
+  function powSpheres() {
+    if (!pow || missionBranch !== 'RESCUE') return [];
+    var bx = pow.x, bz = pow.z;
+    var crouch = !pow.freed;
+    if (crouch) {
+      return [
+        { x: bx, y: 0.32, z: bz, r: 0.30 },
+        { x: bx, y: 0.72, z: bz, r: 0.24 },
+        { x: bx + 0.12, y: 0.95, z: bz, r: 0.16 }
+      ];
+    }
+    return [
+      { x: bx, y: 0.45, z: bz, r: 0.28 },
+      { x: bx, y: 1.05, z: bz, r: 0.24 },
+      { x: bx, y: 1.55, z: bz, r: 0.18 },
+      { x: bx, y: 1.85, z: bz, r: 0.14 }
+    ];
+  }
+
+  function tryFreePow() {
+    if (missionBranch !== 'RESCUE' || !pow || pow.freed) return false;
+    var range = interactRange();
+    if (!near(pow.x, pow.z, range + 0.4)) return false;
+    pow.freed = true;
+    emitNoise(NOISE_INTERACT * 0.7);
+    if (A.fuseChime) A.fuseChime();
+    pushMsg('POW FREED — ESCORT TO LZ · DARK GREEN ON LiDAR', 'amber', 4);
+    return true;
+  }
+
+  function tryBoardLz(fromInteract) {
+    if (exfilPhase !== 'ON_STATION') return false;
+    if (!near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) return false;
+    if (missionBranch === 'RESCUE') {
+      if (!pow || !pow.freed) {
+        if (fromInteract) pushMsg('POW STILL HELD — FREE THEM FIRST', 'red');
+        return false;
+      }
+      var pd = Math.hypot(pow.x - M.markers.X.x, pow.z - M.markers.X.z);
+      if (pd > LZ_RADIUS + 0.8) {
+        if (fromInteract) pushMsg('POW NOT ON PAD — BRING THEM IN', 'amber');
+        return false;
+      }
+      winGame('RESCUE');
+      return true;
+    }
+    if (missionBranch === 'VIRUS') {
+      if (!virusDone) {
+        if (fromInteract) pushMsg('VIRUS INCOMPLETE — RETURN TO CONSOLE', 'red');
+        return false;
+      }
+      winGame('VIRUS');
+      return true;
+    }
+    return false;
+  }
+
+  function updateVirusPlant(dt, vrInput) {
+    virusHolding = false;
+    virusWristActive = false;
+    if (missionBranch !== 'VIRUS' || virusDone) return;
+    var atConsole = near(M.markers.G.x, M.markers.G.z, interactRange() + 0.8);
+    if (!atConsole) return;
+    virusWristActive = true;
+    var holding = vrInput
+      ? !!vrInput.holdB
+      : !!(keys['KeyE'] || keys['KeyB'] || keys['KeyV']);
+    if (!holding) return;
+    virusHolding = true;
+    virusProgress = Math.min(1, virusProgress + dt / VIRUS_DURATION_S);
+    virusNoiseTimer -= dt;
+    if (virusNoiseTimer <= 0) {
+      virusNoiseTimer = 0.55;
+      emitNoise(NOISE_VIRUS * 0.45);
+    }
+    if (virusProgress >= 1) {
+      virusDone = true;
+      virusProgress = 1;
+      virusHolding = false;
+      virusWristActive = false;
+      emitNoise(NOISE_VIRUS);
+      EN.addAgitationFloor(20);
+      pushMsg('VIRUS PLANTED — MOVE TO LZ', 'amber', 4);
+    }
+  }
+
+  function updatePow(dt) {
+    if (!pow || missionBranch !== 'RESCUE' || !pow.freed) return;
+    var dx = player.x - pow.x, dz = player.z - pow.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist <= POW_STOP_DIST) {
+      pow.path = null;
+      return;
+    }
+    pow.repath -= dt;
+    if (!pow.path || pow.pathIdx >= pow.path.length || pow.repath <= 0) {
+      pow.path = M.astar(pow.x, pow.z, player.x, player.z);
+      pow.pathIdx = 0;
+      pow.repath = 0.45;
+    }
+    if (!pow.path || !pow.path.length) {
+      // fallback direct steer
+      var inv = dist > 0.001 ? 1 / dist : 0;
+      var nx = pow.x + dx * inv * POW_FOLLOW_SPEED * dt;
+      var nz = pow.z + dz * inv * POW_FOLLOW_SPEED * dt;
+      var moved = M.moveWithCollision(pow.x, pow.z, nx, nz, POW_RADIUS);
+      pow.x = moved.x; pow.z = moved.z;
+      return;
+    }
+    var stepBudget = POW_FOLLOW_SPEED * dt;
+    while (stepBudget > 0 && pow.path && pow.pathIdx < pow.path.length) {
+      var wp = pow.path[pow.pathIdx];
+      var wx = wp.x - pow.x, wz = wp.z - pow.z;
+      var wl = Math.sqrt(wx * wx + wz * wz);
+      if (wl < 0.15) { pow.pathIdx++; continue; }
+      var take = Math.min(stepBudget, wl);
+      var mx2 = pow.x + (wx / wl) * take;
+      var mz2 = pow.z + (wz / wl) * take;
+      var mv = M.moveWithCollision(pow.x, pow.z, mx2, mz2, POW_RADIUS);
+      pow.x = mv.x; pow.z = mv.z;
+      stepBudget -= take;
+      if (Math.hypot(pow.x - wp.x, pow.z - wp.z) < 0.2) pow.pathIdx++;
+    }
   }
 
   // Floating jack-in matrix panel in front of the operator (VR-visible)
@@ -874,10 +1294,17 @@
 
   function interact() {
     if (CIR && CIR.isActive()) { CIR.rotateSelected(); return; }
+    if (cloneUiActive()) return;
     var range = interactRange();
+
+    if (tryFreePow()) return;
 
     if (inVR()) {
       var pick = vrAimPick();
+      if (pick && pick.kind === 'pow' && pick.dist <= range + 0.6) {
+        tryFreePow();
+        return;
+      }
       if (pick && pick.kind === 'memo') {
         readMemo(pick.i);
         return;
@@ -958,17 +1385,13 @@
       return;
     }
 
-    // jack-in console — only console-room door must be open
+    // jack-in / virus console
     if (near(M.markers.G.x, M.markers.G.z, range + 0.5)) {
       tryJackIn();
       return;
     }
 
-    // LZ board during on-station
-    if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
-      winGame();
-      return;
-    }
+    if (tryBoardLz(true)) return;
     if (exfilPhase === 'INBOUND' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
       queueMsg('LZ COLD — CHOPPER STILL INBOUND', '');
       return;
@@ -1016,20 +1439,27 @@
       }
     }
 
-    // LZ is intentionally dark on LiDAR — Mission Director on the map guides extract.
-    // Boarding still happens when the operator reaches the pad during on-station.
-
+    // LZ has no LiDAR beacon — Mission Director must voice-guide the operator
     // auto-board if standing in LZ during on-station
     if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS)) {
-      winGame();
+      tryBoardLz(false);
       return;
     }
 
     // interact hints
-    if (!curMsg && !(CIR && CIR.isActive())) {
+    if (!curMsg && !(CIR && CIR.isActive()) && !cloneUiActive()) {
       var hint = '';
       var hintRange = inVR() ? INTERACT_RANGE_VR : INTERACT_RANGE;
       var btn = inVR() ? '[A/X]' : '[E]';
+      if (missionBranch === 'RESCUE' && pow && !pow.freed && near(pow.x, pow.z, hintRange + 0.5)) {
+        hint = btn + ' FREE POW';
+      } else if (missionBranch === 'RESCUE' && pow && pow.freed && near(pow.x, pow.z, hintRange)) {
+        hint = 'POW FOLLOWING — ESCORT TO LZ';
+      } else if (missionBranch === 'VIRUS' && !virusDone && near(M.markers.G.x, M.markers.G.z, hintRange + 0.5)) {
+        hint = virusHolding
+          ? ('UPLOADING VIRUS ' + Math.floor(virusProgress * 100) + '%')
+          : (inVR() ? 'HOLD B — UPLOAD VIRUS' : 'HOLD E — UPLOAD VIRUS');
+      }
       if (inVR()) {
         var aim = vrAimPick();
         if (aim && aim.kind === 'key' && aim.dist <= hintRange + 0.6) {
@@ -1075,8 +1505,13 @@
           ? 'CONSOLE SEALED — OPEN D3 (3 KEYS)'
           : btn + ' JACK INTO CORE';
       }
+      if (missionBranch === 'VIRUS' && virusDone && near(M.markers.G.x, M.markers.G.z, hintRange + 0.5)) {
+        hint = 'VIRUS ARMED — EXTRACT TO LZ';
+      }
       if (exfilPhase === 'ON_STATION' && near(M.markers.X.x, M.markers.X.z, LZ_RADIUS + 1)) {
-        hint = 'EXTRACT ZONE — BOARD NOW';
+        if (missionBranch === 'RESCUE') hint = 'ON THE PAD — POW MUST BOARD WITH YOU';
+        else if (missionBranch === 'VIRUS' && !virusDone) hint = 'VIRUS INCOMPLETE — RETURN TO CONSOLE';
+        else hint = 'ON THE PAD — HOLD FOR EXTRACT';
       }
       for (i = 0; i < memos.length; i++) {
         if (!memos[i].read && near(memos[i].x, memos[i].z, memoRange())) {
@@ -1116,6 +1551,7 @@
   var strideAcc = 0;
   function updatePlayer(dt, vrInput) {
     if (CIR && CIR.isActive()) return; // locked into jack-in
+    if (cloneUiActive()) return; // locked into clone / choice
     var crouch = !vrInput && (keys['ControlLeft'] || keys['ControlRight']);
     var wantSprint = vrInput
       ? (!!vrInput.sprint && !crouch)
@@ -1223,13 +1659,31 @@
     el.chg.textContent = s;
 
     el.obj.innerHTML = (function () {
+      if (clonePhase === 'CLONING') {
+        return '<span class="energized">CLONING ' + Math.floor(clonePct) + '%</span>';
+      }
+      if (clonePhase === 'CHOICE') {
+        return '<span class="energized">CHOOSE: RESCUE OR VIRUS</span>';
+      }
       if (exfilPhase === 'ON_STATION') {
         return '<span class="energized">LZ ON STATION T-' + pad(Math.max(0, Math.ceil(exfilTimer)), 2) + '</span>';
       }
       if (exfilPhase === 'INBOUND') {
         return '<span class="energized">CHOPPER INBOUND T-' + pad(Math.max(0, Math.ceil(exfilTimer)), 2) + '</span>';
       }
-      if (uplinkDone) return '<span class="energized">UPLINK LIVE</span>';
+      if (missionBranch === 'VIRUS' && !virusDone) {
+        return '<span class="energized">VIRUS ' + Math.floor(virusProgress * 100) + '%</span>';
+      }
+      if (missionBranch === 'VIRUS' && virusDone) {
+        return '<span class="energized">VIRUS ARMED · EXTRACT</span>';
+      }
+      if (missionBranch === 'RESCUE' && pow && !pow.freed) {
+        return '<span class="energized">FREE POW · THEN LZ</span>';
+      }
+      if (missionBranch === 'RESCUE' && pow && pow.freed) {
+        return '<span class="energized">ESCORT POW TO LZ</span>';
+      }
+      if (uplinkDone) return '<span class="energized">CLONE ON DRIVE</span>';
       if (M.isConsoleSealed()) {
         return 'KEY ' + keysCollected + '/3 · CONSOLE DOOR';
       }
@@ -1262,7 +1716,9 @@
         contacts: EN.contacts ? EN.contacts() : [{ x: EN.state.x, z: EN.state.z, state: EN.state.state }],
         yaw: player.yaw,
         px: player.x,
-        pz: player.z
+        pz: player.z,
+        virusUpload: (virusWristActive || virusHolding) && !virusDone ? virusProgress : null,
+        virusHolding: virusHolding
       });
     }
 
@@ -1331,6 +1787,16 @@
         updateMsg(dt);
         updateHUD(dt);
         vrHudHint = 'STICK: MOVE TILE · A/X: ROTATE · ROUTE ENTRY→CORE';
+      } else if (cloneUiActive()) {
+        if (vrInput && R.setWristModel) {
+          R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
+        }
+        updateCloneSequence(dt, vrInput);
+        updateMsg(dt);
+        updateHUD(dt);
+        vrHudHint = clonePhase === 'CLONING'
+          ? 'CLONING AI ONTO HARD DRIVE… ' + Math.floor(clonePct) + '%'
+          : 'STICK: SELECT · A/X: CONFIRM PATH';
       } else {
         if (R.setCircuitPanel) R.setCircuitPanel(null, null);
         updatePlayer(dt, vrInput);
@@ -1361,6 +1827,8 @@
 
         updateScanner(dt);
         updateLasers(dt);
+        updateVirusPlant(dt, vrInput);
+        updatePow(dt);
         updateItems(dt);
         updateExfil(dt);
         if (NS.mic) NS.mic.tick(dt, state === 'PLAY', function (loud) { emitNoise(loud); });
@@ -1422,6 +1890,7 @@
   NS.game = {
     init: init,
     fusesCollected: function () { return keysCollected; },
+    cloneUiActive: cloneUiActive,
     onVRStart: function () {
       if (A.stopAllTransient) A.stopAllTransient();
       if (!runActive) startRun();
@@ -1435,6 +1904,7 @@
       vrScanOrigin = null;
       vrScanDirection = null;
       if (CIR && CIR.isActive()) CIR.close();
+      clonePhase = 'NONE';
       if (R.setCircuitPanel) R.setCircuitPanel(null, null);
       if (R.setWristModel) R.setWristModel(null);
       if (NS.mic) NS.mic.stop();
