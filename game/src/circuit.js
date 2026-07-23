@@ -7,11 +7,15 @@
   var BEND = 3;       // N+E
 
   var SIZE = 4;
-  var TIMEOUT = 45;
+  var TIMEOUT = 75;
+  var SCRAMBLE_MIN = 5;
+  var SCRAMBLE_MAX = 7;
 
   var active = false;
   var tiles = [];
   var rot = [];
+  var solutionRot = [];
+  var pathCells = {};
   var selected = 0;
   var timeLeft = TIMEOUT;
   var onSuccess = null;
@@ -36,21 +40,81 @@
 
   function idx(c, r) { return r * SIZE + c; }
 
+  function typeForMask(m) {
+    return (m === 5 || m === 10) ? STRAIGHT : BEND;
+  }
+
+  function rotationForMask(type, target) {
+    for (var t = 0; t < 4; t++) {
+      if (rotateMask(type, t) === target) return t;
+    }
+    return 0;
+  }
+
+  // Guaranteed-solvable board: carve a random E/S lattice path ENTRY→CORE,
+  // place matching tiles, fill distractors, then scramble only a few rotations
+  // away from the solution so it stays fair in VR.
   function resetPuzzle() {
-    tiles = [
-      BEND, STRAIGHT, BEND, BEND,
-      STRAIGHT, BEND, STRAIGHT, BEND,
-      BEND, STRAIGHT, BEND, STRAIGHT,
-      BEND, BEND, STRAIGHT, BEND
-    ];
-    rot = [];
-    for (var i = 0; i < SIZE * SIZE; i++) rot.push(Math.floor(Math.random() * 4));
-    rot[0] = 1;
-    rot[SIZE * SIZE - 1] = 3;
+    var DIRBIT = { N: 1, E: 2, S: 4, W: 8 };
+    var OPP = { N: 'S', E: 'W', S: 'N', W: 'E' };
+
+    var moves = [];
+    for (var k = 0; k < SIZE - 1; k++) { moves.push('E'); moves.push('S'); }
+    for (k = moves.length - 1; k > 0; k--) {
+      var j = Math.floor(Math.random() * (k + 1));
+      var tmp = moves[k]; moves[k] = moves[j]; moves[j] = tmp;
+    }
+
+    var pathMask = {};
+    pathCells = {};
+    var c = 0, r = 0, inDir = 'W';
+    for (k = 0; k <= moves.length; k++) {
+      var outDir = k < moves.length ? moves[k] : 'E';
+      var id = idx(c, r);
+      pathMask[id] = DIRBIT[inDir] | DIRBIT[outDir];
+      pathCells[id] = true;
+      if (k < moves.length) {
+        if (outDir === 'E') c++; else r++;
+        inDir = OPP[outDir];
+      }
+    }
+
+    tiles = [];
+    solutionRot = [];
+    for (var i = 0; i < SIZE * SIZE; i++) {
+      var m = pathMask[i];
+      var type = m ? typeForMask(m) : (Math.random() < 0.55 ? STRAIGHT : BEND);
+      tiles.push(type);
+      solutionRot.push(m ? rotationForMask(type, m) : Math.floor(Math.random() * 4));
+    }
+
+    // Start from the solved board, then misalign a handful of tiles.
+    rot = solutionRot.slice();
+    var scramble = SCRAMBLE_MIN + Math.floor(Math.random() * (SCRAMBLE_MAX - SCRAMBLE_MIN + 1));
+    var touched = {};
+    var guard = 0;
+    while (scramble > 0 && guard++ < 64) {
+      var pi = Math.floor(Math.random() * SIZE * SIZE);
+      if (touched[pi]) continue;
+      touched[pi] = true;
+      var offset = 1 + Math.floor(Math.random() * 3);
+      rot[pi] = (solutionRot[pi] + offset) % 4;
+      scramble--;
+    }
+    guard = 0;
+    while (connected() && guard++ < 24) {
+      pi = Math.floor(Math.random() * SIZE * SIZE);
+      rot[pi] = (rot[pi] + 1) % 4;
+    }
+
     selected = 0;
     timeLeft = TIMEOUT;
     confirmHold = 0;
     dirty = true;
+  }
+
+  function applySolution() {
+    for (var i = 0; i < SIZE * SIZE; i++) rot[i] = solutionRot[i];
   }
 
   function maskAt(c, r) {
@@ -58,9 +122,15 @@
   }
 
   function connected() {
-    if (!(maskAt(0, 0) & 8)) return false;
-    var seen = {}, q = [{ c: 0, r: 0 }];
-    seen[idx(0, 0)] = true;
+    return liveSet()[idx(SIZE - 1, SIZE - 1)] === true && !!(maskAt(SIZE - 1, SIZE - 1) & 2);
+  }
+
+  // Flood from ENTRY; used for win-check and "powered" tile feedback.
+  function liveSet() {
+    var live = {};
+    if (!(maskAt(0, 0) & 8)) return live;
+    var q = [{ c: 0, r: 0 }];
+    live[idx(0, 0)] = true;
     var dirs = [
       { b: 1, dc: 0, dr: -1, opp: 4 },
       { b: 2, dc: 1, dr: 0, opp: 8 },
@@ -69,9 +139,6 @@
     ];
     while (q.length) {
       var cur = q.shift();
-      if (cur.c === SIZE - 1 && cur.r === SIZE - 1) {
-        return !!(maskAt(cur.c, cur.r) & 2);
-      }
       var m = maskAt(cur.c, cur.r);
       for (var d = 0; d < 4; d++) {
         if (!(m & dirs[d].b)) continue;
@@ -79,12 +146,12 @@
         if (nc < 0 || nr < 0 || nc >= SIZE || nr >= SIZE) continue;
         if (!(maskAt(nc, nr) & dirs[d].opp)) continue;
         var k = idx(nc, nr);
-        if (seen[k]) continue;
-        seen[k] = true;
+        if (live[k]) continue;
+        live[k] = true;
         q.push({ c: nc, r: nr });
       }
     }
-    return false;
+    return live;
   }
 
   function inVR() {
@@ -122,9 +189,9 @@
     });
   }
 
-  function drawPipe(cx, cy, mask, color) {
+  function drawPipe(cx, cy, mask, color, width) {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 8;
+    ctx.lineWidth = width || 8;
     ctx.lineCap = 'round';
     ctx.beginPath();
     if (mask & 1) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - 28); }
@@ -149,34 +216,71 @@
     ctx.fillStyle = '#3f8a55';
     ctx.font = '11px Consolas, monospace';
     if (inVR()) {
-      ctx.fillText('RIGHT STICK MOVE TILE · A/X ROTATE · CONNECT ENTRY→CORE', canvas.width / 2, 40);
+      ctx.fillText('STICK MOVE · A/X ROTATE · TRIGGER = NEXT TILE', canvas.width / 2, 40);
     } else {
-      ctx.fillText('CLICK / A / E ROTATE TILE — CONNECT ENTRY TO CORE', canvas.width / 2, 40);
+      ctx.fillText('CLICK TILE TO ROTATE — CONNECT ENTRY → CORE', canvas.width / 2, 40);
     }
     ctx.fillStyle = timeLeft < 10 ? '#ff4444' : '#ffb347';
     ctx.fillText('LOCKOUT T-' + Math.ceil(timeLeft) + 's', canvas.width / 2, 56);
 
     var pad = 40, cell = 80;
+    var live = liveSet();
+    var ok = connected();
+
+    // ENTRY / CORE stubs so the required openings are obvious
+    ctx.strokeStyle = live[idx(0, 0)] ? '#9fffbb' : '#ffb347';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pad - 18, pad + 20 + cell * 0.5);
+    ctx.lineTo(pad + 8, pad + 20 + cell * 0.5);
+    ctx.stroke();
+    ctx.strokeStyle = ok ? '#9fffbb' : '#ffb347';
+    ctx.beginPath();
+    ctx.moveTo(pad + SIZE * cell - 8, pad + 20 + cell * (SIZE - 0.5));
+    ctx.lineTo(pad + SIZE * cell + 18, pad + 20 + cell * (SIZE - 0.5));
+    ctx.stroke();
+
     ctx.fillStyle = '#7cff9b';
     ctx.font = '12px Consolas, monospace';
-    ctx.fillText('ENTRY', 28, pad + 20 + cell * 0.5);
-    ctx.fillText('CORE', canvas.width - 28, pad + 20 + cell * (SIZE - 0.5));
+    ctx.fillText('ENTRY', 22, pad + 20 + cell * 0.5 + 16);
+    ctx.fillText('CORE', canvas.width - 22, pad + 20 + cell * (SIZE - 0.5) + 16);
 
-    var ok = connected();
     for (var r = 0; r < SIZE; r++) {
       for (var c = 0; c < SIZE; c++) {
         var i = idx(c, r);
         var x = pad + c * cell, y = pad + 20 + r * cell;
-        ctx.strokeStyle = i === selected ? '#ffb347' : '#3f8a55';
-        ctx.lineWidth = i === selected ? 2 : 1;
+        var powered = !!live[i];
+        ctx.strokeStyle = i === selected ? '#ffb347' : (powered ? '#7cff9b' : '#3f8a55');
+        ctx.lineWidth = i === selected ? 2.5 : 1;
         ctx.strokeRect(x + 4, y + 4, cell - 8, cell - 8);
-        drawPipe(x + cell / 2, y + cell / 2, maskAt(c, r), ok ? '#9fffbb' : '#7cff9b');
+        var col = ok ? '#9fffbb' : (powered ? '#b8ffd0' : '#4a7a58');
+        drawPipe(x + cell / 2, y + cell / 2, maskAt(c, r), col, powered ? 9 : 7);
+
+        // bright joint dots where this tile already mates with a neighbor
+        var m = maskAt(c, r);
+        if ((m & 2) && c + 1 < SIZE && (maskAt(c + 1, r) & 8)) {
+          ctx.fillStyle = '#ffb347';
+          ctx.beginPath();
+          ctx.arc(x + cell - 2, y + cell / 2, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if ((m & 4) && r + 1 < SIZE && (maskAt(c, r + 1) & 1)) {
+          ctx.fillStyle = '#ffb347';
+          ctx.beginPath();
+          ctx.arc(x + cell / 2, y + cell - 2, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
     if (ok) {
       ctx.fillStyle = '#ffb347';
       ctx.font = '13px Consolas, monospace';
       ctx.fillText('PATH VALID — HOLDING TO CONFIRM…', canvas.width / 2, canvas.height - 16);
+    } else {
+      ctx.fillStyle = '#3f8a55';
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillText('LIT TILES = POWERED FROM ENTRY · JOIN AMBER DOTS TO CORE', canvas.width / 2, canvas.height - 16);
     }
     dirty = true;
   }
@@ -223,6 +327,13 @@
     render();
   }
 
+  function nextTile() {
+    if (!active) return;
+    selected = (selected + 1) % (SIZE * SIZE);
+    confirmHold = 0;
+    render();
+  }
+
   function open(successCb, timeoutCb) {
     ensureCanvas();
     resetPuzzle();
@@ -244,13 +355,20 @@
 
   NS.circuit = {
     open: open, close: close, update: update, rotateSelected: rotateSelected,
-    moveSelection: moveSelection,
+    moveSelection: moveSelection, nextTile: nextTile,
     isActive: function () { return active; },
     getCanvas: function () { return canvas; },
     consumeDirty: function () {
       var d = dirty;
       dirty = false;
       return d;
+    },
+    debug: {
+      reset: resetPuzzle,
+      solve: applySolution,
+      connected: connected,
+      rot: function () { return rot.slice(); },
+      solutionRot: function () { return solutionRot.slice(); }
     }
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})

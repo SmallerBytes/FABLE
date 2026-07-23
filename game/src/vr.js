@@ -19,7 +19,7 @@
   var currentInput = {
     moveX: 0, moveY: 0, heading: 0,
     bodyYaw: 0,
-    trickle: false, burstPressed: false, interactPressed: false,
+    trickle: false, burstPressed: false, interactPressed: false, tricklePressed: false,
     sprint: false,
     navX: 0, navY: 0,
     aimOrigin: null, aimDirection: null,
@@ -163,6 +163,7 @@
     currentInput.trickle = false;
     currentInput.burstPressed = false;
     currentInput.interactPressed = false;
+    currentInput.tricklePressed = false;
     currentInput.sprint = false;
     currentInput.navX = 0;
     currentInput.navY = 0;
@@ -223,7 +224,10 @@
 
       var id = source.handedness || String(i);
       if (source.handedness === 'right' || source.handedness === 'none') {
-        currentInput.trickle = currentInput.trickle || pressed(gp, 0);
+        var trig = pressed(gp, 0);
+        currentInput.trickle = currentInput.trickle || trig;
+        currentInput.tricklePressed = currentInput.tricklePressed ||
+          rising(id + '-trig', trig);
         currentInput.burstPressed = currentInput.burstPressed ||
           rising(id + '-burst', pressed(gp, 1));
       }

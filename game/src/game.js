@@ -1339,6 +1339,8 @@
           if (vrInput.navX) CIR.moveSelection(vrInput.navX, 0);
           if (vrInput.navY) CIR.moveSelection(0, vrInput.navY);
           if (vrInput.interactPressed) CIR.rotateSelected();
+          if (vrInput.burstPressed && CIR.nextTile) CIR.nextTile();
+          if (vrInput.tricklePressed && CIR.nextTile) CIR.nextTile();
           if (R.setWristModel) {
             R.setWristModel(buildWristModel(vrInput.wrist, vrInput.bodyYaw));
           }
