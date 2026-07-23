@@ -67,7 +67,7 @@
   var LASER_COOLDOWN = 10;
 
   var CHOPPER_INBOUND_S = 40;
-  var CHOPPER_LINGER_S = 25;
+  var CHOPPER_LINGER_S = 60;
   var MISSION_TIME_S = 8 * 60; // power returns — hard fail
   var LZ_RADIUS = 3.5;
   var NOISE_UPLINK = 40;
@@ -773,12 +773,15 @@
     exfilPhase = 'INBOUND';
     exfilTimer = CHOPPER_INBOUND_S;
     if (A.chopperInbound) A.chopperInbound();
-    EN.state.agitation = 100;
-    EN.hear(M.markers.G.x, M.markers.G.z, NOISE_UPLINK, now, true);
-    EN.forceChase(now);
     if (missionBranch === 'RESCUE') {
+      // Rescue path draws heat immediately
+      EN.state.agitation = 100;
+      EN.hear(M.markers.G.x, M.markers.G.z, NOISE_UPLINK, now, true);
+      EN.forceChase(now);
       queueMsg('RESCUE PATH — MAP GUIDE: ROUTE TO POW THEN LZ', 'amber', 5);
     } else {
+      // Virus path: stay quiet until plant completes — no security surge on choose
+      EN.addAgitationFloor(8);
       queueMsg('VIRUS PATH — PLANT AT CONSOLE THEN EXTRACT', 'amber', 5);
     }
   }
@@ -900,7 +903,7 @@
     for (i = 0; i < memos.length; i++) {
       if (memos[i].read) continue;
       t = raySphere(ox, oy, oz, dx, dy, dz, { x: memos[i].x, y: 0.7, z: memos[i].z, r: 0.4 });
-      if (t > 0 && t < bestT) { bestT = t; color = C_CYAN; life = POINT_LIFE; }
+      if (t > 0 && t < bestT) { bestT = t; color = C_AMBER; life = POINT_LIFE; }
     }
     // locked blast doors — dark blue slab (also fills gaps if ray grazes)
     for (i = 0; i < M.markers.doors.length; i++) {
@@ -1078,7 +1081,7 @@
   function readMemo(i) {
     if (memos[i].read) return false;
     memos[i].read = true;
-    queueMsg(MEMO_TEXTS[memos[i].i], 'cyan', 9);
+    queueMsg(MEMO_TEXTS[memos[i].i], 'amber', 9);
     A.fuseChime();
     A.teletype();
     A.teletype();
@@ -1256,18 +1259,23 @@
     if (!holding) return;
     virusHolding = true;
     virusProgress = Math.min(1, virusProgress + dt / VIRUS_DURATION_S);
+    // Soft plant noise only — no loud uplink surge while uploading
     virusNoiseTimer -= dt;
     if (virusNoiseTimer <= 0) {
-      virusNoiseTimer = 0.55;
-      emitNoise(NOISE_VIRUS * 0.45);
+      virusNoiseTimer = 0.85;
+      emitNoise(NOISE_VIRUS * 0.22);
     }
     if (virusProgress >= 1) {
       virusDone = true;
       virusProgress = 1;
       virusHolding = false;
       virusWristActive = false;
-      emitNoise(NOISE_VIRUS);
-      EN.addAgitationFloor(20);
+      // Quiet plant — no alarm sting; security drifts toward the LZ
+      if (M.markers.X && EN.convergeOn) {
+        EN.convergeOn(M.markers.X.x, M.markers.X.z);
+      } else {
+        EN.addAgitationFloor(15);
+      }
       pushMsg('VIRUS PLANTED — MOVE TO LZ', 'amber', 4);
     }
   }

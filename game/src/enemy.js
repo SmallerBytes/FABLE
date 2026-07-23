@@ -205,6 +205,38 @@
     if (typeof now === 'number') lastNoiseFed = now;
     enterChase();
   }
+
+  // Quiet converge: all units path toward a site (e.g. LZ) without chase sting.
+  function convergeOn(x, z) {
+    var offsets = [
+      { x: 0, z: 0 },
+      { x: 6, z: 4 },
+      { x: -5, z: 7 }
+    ];
+    var tx = x + offsets[0].x, tz = z + offsets[0].z;
+    E.agitation = Math.min(100, E.agitation + 25);
+    E.agitationFloor = Math.max(E.agitationFloor, 20);
+    lastKnownX = tx; lastKnownZ = tz;
+    mustInvestigateAfterChase = false;
+    if (E.state === 'CHASE') NS.audio.sting(false);
+    E.state = 'INVESTIGATE';
+    investigateTarget = { x: tx, z: tz };
+    dwellTimer = 0;
+    setPathTo(tx, tz);
+
+    for (var i = 0; i < SECONDARIES.length; i++) {
+      var U = SECONDARIES[i];
+      var ox = x + offsets[i + 1].x, oz = z + offsets[i + 1].z;
+      U.agitation = Math.min(100, U.agitation + 22);
+      U.agitationFloor = Math.max(U.agitationFloor, 16);
+      U.lastKnownX = ox; U.lastKnownZ = oz;
+      U.state = 'INVESTIGATE';
+      U.path = M.astar(U.x, U.z, ox, oz);
+      U.pathIdx = 0;
+      U.repathTimer = 0;
+    }
+  }
+
   function leaveChase(toInvestigateAt) {
     NS.audio.sting(false);
     mustInvestigateAfterChase = true;
@@ -652,7 +684,8 @@
     contacts: contacts,
     addAgitationFloor: addAgitationFloor,
     forceChase: forceChase,
-    forceInvestigate: forceInvestigate
+    forceInvestigate: forceInvestigate,
+    convergeOn: convergeOn
   };
 })(typeof window !== 'undefined' ? (window.HOLLOW = window.HOLLOW || {})
                                  : (global.HOLLOW = global.HOLLOW || {}));
